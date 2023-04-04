@@ -1,0 +1,13 @@
+{{ if .Values.grafana.useDefault }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dashboard
+  labels:
+    {{- include "kube-hpa-scale-to-zero.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+{{ (.Files.Glob .Values.grafana.dashboard).AsConfig | indent 2 -}}
+
+{{ end }}

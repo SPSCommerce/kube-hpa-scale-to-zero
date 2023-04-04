@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kube-hpa-scale-to-zero.fullname" . }}
+  labels:
+    {{- include "kube-hpa-scale-to-zero.labels" . | nindent 4 }}
+    app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
+spec:
+  replicas: 1 # this service was not designed to scale horizontally
+  selector:
+    matchLabels:
+      {{- include "kube-hpa-scale-to-zero.selectorLabels" . | nindent 6 }}
+      app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
+  template:
+    metadata:
+      labels:
+        {{- include "kube-hpa-scale-to-zero.labels" . | nindent 8 }}
+        app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
+    spec:
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.pod.repository }}:{{ .Values.pod.version }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --hpa-selector
+            - {{ .Values.app.hpaSelector }}
+            - --port
+            - {{ .Values.app.port | quote }}
+          ports:
+            - containerPort: {{ .Values.app.port }}
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: {{ .Values.app.port }}
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: {{ .Values.app.port }}
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.pod.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kube-hpa-scale-to-zero.fullname" . }}
+  labels:
+    {{- include "kube-hpa-scale-to-zero.labels" . | nindent 4 }}
+    app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
+spec:
+  ports:
+    - port: {{ .Values.app.port }}
+      protocol: TCP
+      targetPort: {{ .Values.app.port }}
+      name: metrics
+  selector:
+    {{- include "kube-hpa-scale-to-zero.selectorLabels" . | nindent 4 }}
+    app: {{ include "kube-hpa-scale-to-zero.fullname" . }}

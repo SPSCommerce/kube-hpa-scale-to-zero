@@ -1,0 +1,40 @@
+rbac:
+  useDefault: true
+  serviceAccountName: hpa-scale-to-zero
+
+app:
+  hpaSelector: spscommerce.com/scaleToZero=true
+  port: 9000
+
+pod:
+  repository: ""
+  version: ""
+  resources:
+    limits:
+      cpu: 100m
+      memory: 100Mi
+    requests:
+      cpu: 50m
+      memory: 50Mi
+
+grafana:
+  useDefault: true
+  dashboard: "files/grafana.json"
+
+prometheus:
+  useDefault: true
+  selector: cluster-prometheus
+  alerts:
+    useDefault: true
+    labels: {}
+    panics:
+      severity: critical
+      description: Unable to proceed with HPA because of panic.
+    metricErrors:
+      severity: warning
+      description: Unable to process one of HPA metrics.
+    scalingErrors:
+      severity: critical
+      description: HPA target should be scaled, but error occured.
+
+
