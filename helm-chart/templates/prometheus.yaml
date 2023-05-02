@@ -45,7 +45,7 @@ spec:
             severity: {{ .Values.prometheus.alerts.panics.severity }}
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.panics.description }}
+            description: {{ .Values.prometheus.alerts.panics.description | toYaml }}
 
     - name: ScaleToZeroMetricError
       rules:
@@ -60,7 +60,7 @@ spec:
             severity: {{ .Values.prometheus.alerts.metricErrors.severity }}
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.metricErrors.description }}
+            description: {{ .Values.prometheus.alerts.metricErrors.description | toYaml }}
 
     - name: ScaleToZeroScalingError
       rules:
@@ -75,6 +75,6 @@ spec:
             severity: {{ .Values.prometheus.alerts.scalingErrors.severity }}
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.scalingErrors.description }}
+            description: {{ .Values.prometheus.alerts.scalingErrors.description | toYaml }}
 {{ end }}
 {{ end }}
