@@ -352,7 +352,7 @@ func MonitorHpa(ctx context.Context,
 
 		if err != nil {
 			// it will take some time for k8s to actualize HPA state, so we should not track these errors as real errors
-			if hpa.ObjectMeta.CreationTimestamp.Time.Add(time.Minute).After(time.Now()) {
+			if hpa.ObjectMeta.CreationTimestamp.Time.Add(3 * time.Minute).After(time.Now()) {
 				logger.Info(fmt.Sprintf("Not able to process newly-created HPA: %s", err))
 			} else {
 				logger.Error(err, "not able to process HPA")
