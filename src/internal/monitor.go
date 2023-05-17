@@ -321,7 +321,7 @@ func ActualizeHpaTargetState(
 			prometheus.ScaleOut.Inc()
 		}
 	} else {
-		logger.Info("is in correct state")
+		//logger.Debug("is in correct state")
 	}
 
 	return nil
@@ -355,7 +355,7 @@ func MonitorHpa(ctx context.Context,
 			if hpa.ObjectMeta.CreationTimestamp.Time.Add(3 * time.Minute).After(time.Now()) {
 				logger.Info(fmt.Sprintf("Not able to process newly-created HPA: %s", err))
 			} else {
-				logger.Error(err, "not able to process HPA")
+				logger.Error("not able to process HPA: %s", err)
 				metricsContext.TrackError(hpa.UID, err)
 			}
 		}
