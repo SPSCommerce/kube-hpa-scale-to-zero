@@ -24,7 +24,7 @@ func UnmarshalCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler) (*[]autos
 	hpaMetricsRaw := hpa.ObjectMeta.Annotations["autoscaling.alpha.kubernetes.io/current-metrics"]
 
 	if hpaMetricsRaw == "" {
-		return nil, fmt.Errorf("no 'current-metrics' annotation exists")
+		return nil, fmt.Errorf("unexpected response from kube: no 'current-metrics' annotation exists")
 	}
 
 	var currentMetrics []autoscaling.MetricStatus
@@ -328,6 +328,7 @@ func ActualizeHpaTargetState(
 }
 
 func MonitorHpa(ctx context.Context,
+	initialHpaState *autoscaling.HorizontalPodAutoscaler,
 	logger *zap.SugaredLogger,
 	client *kubernetes.Clientset,
 	customMetrics custom_metrics.CustomMetricsClient,
@@ -338,10 +339,12 @@ func MonitorHpa(ctx context.Context,
 	defer func() {
 		err := recover()
 		if err != nil {
-			logger.Error(err.(error), fmt.Sprintf("PANIC at %s", debug.Stack()))
 			metricsContext.Panics.Inc()
+			logger.Errorf("PANIC '%s' occured at %s", err.(error), debug.Stack())
 		}
 	}()
+
+	metricsContext.RegisterNewHpa(initialHpaState.UID, initialHpaState.Namespace, initialHpaState.Name)
 
 	for hpa := range channel {
 		logger := logger.With("uid", hpa.UID,
@@ -353,13 +356,15 @@ func MonitorHpa(ctx context.Context,
 		if err != nil {
 			// it will take some time for k8s to actualize HPA state, so we should not track these errors as real errors
 			if hpa.ObjectMeta.CreationTimestamp.Time.Add(3 * time.Minute).After(time.Now()) {
-				logger.Info(fmt.Sprintf("Not able to process newly-created HPA: %s", err))
+				logger.Infof("Not able to process newly-created HPA: %s", err)
 			} else {
-				logger.Error("not able to process HPA: %s", err)
+				logger.Errorf("not able to process HPA: %s", err)
 				metricsContext.TrackError(hpa.UID, err)
 			}
 		}
 	}
+
+	metricsContext.DeregisterHpa(initialHpaState.UID)
 }
 
 func SetupHpaInformer(ctx context.Context,
@@ -381,7 +386,7 @@ func SetupHpaInformer(ctx context.Context,
 	go factory.Start(ctx.Done())
 
 	if !cache.WaitForCacheSync(ctx.Done(), hpaInformer.HasSynced) {
-		logger.Fatalf("timed out waiting for caches to sync")
+		logger.Fatal("timed out waiting for caches to sync")
 	}
 
 	channels := make(map[types.UID]chan *autoscaling.HorizontalPodAutoscaler)
@@ -395,10 +400,8 @@ func SetupHpaInformer(ctx context.Context,
 
 			channels[hpa.UID] = channel
 
-			metrics.RegisterNewHpa(hpa.UID, hpa.Namespace, hpa.Name)
-
 			logger.Infow("New hpa has been detected ", "uid", hpa.UID)
-			go MonitorHpa(ctx, logger.Named("HpaMonitor"), client, customMetrics, externalMetrics, metrics, channel)
+			go MonitorHpa(ctx, hpa, logger.Named("HpaMonitor"), client, customMetrics, externalMetrics, metrics, channel)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			hpa := newObj.(*autoscaling.HorizontalPodAutoscaler)
@@ -409,8 +412,6 @@ func SetupHpaInformer(ctx context.Context,
 
 			close(channels[hpa.UID])
 			delete(channels, hpa.UID)
-
-			metrics.DeregisterHpa(hpa.UID)
 
 			logger.Infow("Monitoring has been stopped", "uid", hpa.UID)
 		},
