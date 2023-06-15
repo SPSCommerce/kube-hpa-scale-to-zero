@@ -7,8 +7,8 @@ app:
   port: 9000
 
 pod:
-  repository: ""
-  version: ""
+  repository: "<path to your OCI repository>"
+  version: "<tag>"
   resources:
     limits:
       cpu: 100m

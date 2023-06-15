@@ -40,6 +40,13 @@ loop every minute
 end
 ```
 
+### Available metrics
+```
+scale_to_zero_errors
+scale_to_zero_events
+scale_to_zero_panics
+```
+
 ### Howto test locally
 You can install demo services from the `./demo` folder
 ```
@@ -49,8 +56,8 @@ kubectl apply -f metric-generator.yml -n integration-demo
 to have multiple deployments with multiple random metrics bouncing between 0 and 1
 
 > **Note**\
-> This example uses `spscommerce.com/scaleToZero: demo` instead of the real `spscommerce.com/scaleToZero: true`
+> This example uses `spscommerce.com/scaleToZero=demo` instead of the real `spscommerce.com/scaleToZero=true`
 > This will allow you to test your local version without affecting anything else
 
 Now you can run service locally to scale services in a real kube cluster:
-`go run ./cmd --kube-config "<path to your kube config>" --write-plain-logs --hpa-selector "spscommerce.com/scaleToZero: demo"`
+`go run ./cmd --kube-config "<path to your kube config>" --write-plain-logs --hpa-selector "spscommerce.com/scaleToZero=demo"`
