@@ -30,11 +30,14 @@ prometheus:
     panics:
       severity: critical
       description: Unable to proceed with HPA because of panic.
+      for: 1m
     metricErrors:
       severity: warning
       description: Unable to process one of HPA metrics.
+      for: 3m
     scalingErrors:
       severity: critical
       description: HPA target should be scaled, but error occured.
+      for: 1m
 
 

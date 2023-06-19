@@ -37,7 +37,7 @@ spec:
         - alert: ScaleToZeroPanic
           expr: |-
             delta(scale_to_zero_panics{service="kube-hpa-scale-to-zero"}[2m])>0
-          for: 1m
+          for: {{ .Values.prometheus.alerts.panics.for }}
           labels:
             {{ if .Values.prometheus.alerts.labels }}
             {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
@@ -52,7 +52,7 @@ spec:
         - alert: ScaleToZeroControllerUnableToDetermineIfScalingRequired
           expr: |-
             rate(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[1m])>0
-          for: 3m
+          for: {{ .Values.prometheus.alerts.metricErrors.for }}
           labels:
             {{ if .Values.prometheus.alerts.labels }}
             {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
@@ -67,7 +67,7 @@ spec:
         - alert: ScaleToZeroControllerUnableToScaleDeployment
           expr: |-
             delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])>0
-          for: 1m
+          for: {{ .Values.prometheus.alerts.scalingErrors.for }}
           labels:
             {{ if .Values.prometheus.alerts.labels }}
             {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
