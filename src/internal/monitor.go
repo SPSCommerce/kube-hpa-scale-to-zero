@@ -329,28 +329,29 @@ func ActualizeHpaTargetState(
 
 func MonitorHpa(ctx context.Context,
 	initialHpaState *autoscaling.HorizontalPodAutoscaler,
-	logger *zap.SugaredLogger,
+	basicLogger *zap.SugaredLogger,
 	client *kubernetes.Clientset,
 	customMetrics custom_metrics.CustomMetricsClient,
 	externalMetrics external_metrics.ExternalMetricsClient,
 	metricsContext MetricsContext,
 	channel <-chan *autoscaling.HorizontalPodAutoscaler) {
 
+	logger := basicLogger.With("uid", initialHpaState.UID,
+		"namespace", initialHpaState.Namespace,
+		"name", initialHpaState.Name)
+
 	defer func() {
 		err := recover()
 		if err != nil {
 			metricsContext.Panics.Inc()
 			logger.Errorf("PANIC '%s' occured at %s", err.(error), debug.Stack())
+			panic(err)
 		}
 	}()
 
 	metricsContext.RegisterNewHpa(initialHpaState.UID, initialHpaState.Namespace, initialHpaState.Name)
 
 	for hpa := range channel {
-		logger := logger.With("uid", hpa.UID,
-			"namespace", hpa.Namespace,
-			"name", hpa.Name)
-
 		err := ActualizeHpaTargetState(ctx, logger, client, customMetrics, externalMetrics, metricsContext.Events[hpa.UID], hpa)
 
 		if err != nil {
