@@ -18,7 +18,7 @@ rules:
     verbs: ["get"]
   - apiGroups: ["external.metrics.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list",]
+    verbs: ["get", "list"]
 
 
 ---
