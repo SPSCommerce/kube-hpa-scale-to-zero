@@ -61,12 +61,38 @@ spec:
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
             description: {{ .Values.prometheus.alerts.metricErrors.description | toYaml }}
-
+    # We route this alert to slack_channel or PD key based on HPA namespace labels
     - name: ScaleToZeroScalingError
       rules:
         - alert: ScaleToZeroControllerUnableToScaleDeployment
           expr: |-
-            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])>0
+            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])
+            * on (target_namespace) group_left(slack_channel)
+              label_replace(
+                  label_replace(
+                        kube_namespace_labels,
+                        "slack_channel",
+                        "$1", "label_spscommerce_com_slack_channel",
+                        "(.+)"
+                        ),
+                  "target_namespace",
+                  "$1", "namespace",
+                  "(.+)"
+              )
+            * on (target_namespace) group_left(pagerduty_routing_key)
+              label_replace(
+                  label_replace(
+                      kube_namespace_labels,
+                      "pagerduty_routing_key",
+                      "$1",
+                      "label_spscommerce_com_pagerduty_routing_key",
+                      "(.+)"
+                  ),
+                  "target_namespace",
+                  "$1", "namespace",
+                  "(.+)"
+              )
+            >0
           for: {{ .Values.prometheus.alerts.scalingErrors.for }}
           labels:
             {{ if .Values.prometheus.alerts.labels }}
