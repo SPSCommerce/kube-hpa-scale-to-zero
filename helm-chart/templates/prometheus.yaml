@@ -51,22 +51,7 @@ spec:
       rules:
         - alert: ScaleToZeroControllerUnableToDetermineIfScalingRequired
           expr: |-
-            rate(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[1m])>0
-          for: {{ .Values.prometheus.alerts.metricErrors.for }}
-          labels:
-            {{ if .Values.prometheus.alerts.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
-            {{ end }}
-            severity: {{ .Values.prometheus.alerts.metricErrors.severity }}
-          annotations:
-            summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.metricErrors.description | toYaml }}
-    # We route this alert to slack_channel or PD key based on HPA namespace labels
-    - name: ScaleToZeroScalingError
-      rules:
-        - alert: ScaleToZeroControllerUnableToScaleDeployment
-          expr: |-
-            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])
+            rate(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[1m])
             * on (target_namespace) group_left(slack_channel)
               label_replace(
                   label_replace(
@@ -93,6 +78,21 @@ spec:
                   "(.+)"
               )
             >0
+          for: {{ .Values.prometheus.alerts.metricErrors.for }}
+          labels:
+            {{ if .Values.prometheus.alerts.labels }}
+            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ end }}
+            severity: {{ .Values.prometheus.alerts.metricErrors.severity }}
+          annotations:
+            summary: Scale-to-zero is unable to scale HPA target
+            description: {{ .Values.prometheus.alerts.metricErrors.description | toYaml }}
+    # We route this alert to slack_channel or PD key based on HPA namespace labels
+    - name: ScaleToZeroScalingError
+      rules:
+        - alert: ScaleToZeroControllerUnableToScaleDeployment
+          expr: |-
+            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])>0
           for: {{ .Values.prometheus.alerts.scalingErrors.for }}
           labels:
             {{ if .Values.prometheus.alerts.labels }}
