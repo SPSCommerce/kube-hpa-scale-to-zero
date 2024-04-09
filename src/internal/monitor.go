@@ -114,7 +114,10 @@ func RequestIfExternalMetricValueIsZero(client external_metrics.ExternalMetricsC
 		return false, fmt.Errorf("multiple external metric has been fetched at the same time")
 	}
 
-	metric := metrics.Items[0]
+    if len(metrics.Items) == 0 {
+        return false, fmt.Errorf("Zero metrics returned for %s", spec.External.MetricName)
+    }
+    	metric := metrics.Items[0]
 
 	return metric.Value.IsZero(), nil
 }
