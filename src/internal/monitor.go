@@ -3,6 +3,10 @@ package internal
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
+	"sync"
+	"time"
+
 	"go.uber.org/zap"
 	autoscaling "k8s.io/api/autoscaling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,9 +19,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/metrics/pkg/client/custom_metrics"
 	"k8s.io/metrics/pkg/client/external_metrics"
-	"runtime/debug"
-	"sync"
-	"time"
 )
 
 func UnmarshalCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler) (*[]autoscaling.MetricStatus, error) {
@@ -108,6 +109,10 @@ func RequestIfExternalMetricValueIsZero(client external_metrics.ExternalMetricsC
 
 	if err != nil {
 		return false, fmt.Errorf("unable list metrics: %s", err)
+	}
+
+	if len(metrics.Items) == 0 {
+		return false, fmt.Errorf("no external metrics found")
 	}
 
 	if len(metrics.Items) > 1 {
