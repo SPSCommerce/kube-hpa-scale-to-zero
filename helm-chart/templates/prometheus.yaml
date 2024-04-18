@@ -21,7 +21,7 @@ spec:
       {{- include "kube-hpa-scale-to-zero.selectorLabels" . | nindent 6 }}
       app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
 
-{{ if .Values.prometheus.alerts.useDefault }}
+{{ if or .Values.prometheus.alerts.panics.useDefault .Values.prometheus.alerts.metricErrors.useDefault .Values.prometheus.alerts.scalingErrors.useDefault }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -32,6 +32,7 @@ metadata:
     prometheus: {{ .Values.prometheus.selector }}
 spec:
   groups:
+    {{ if .Values.prometheus.alerts.panics.useDefault }}
     - name: ScaleToZeroPanic
       rules:
         - alert: ScaleToZeroPanic
@@ -42,52 +43,36 @@ spec:
             {{ if .Values.prometheus.alerts.labels }}
             {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
             {{ end }}
+            {{ if .Values.prometheus.alerts.panics.labels }}
+            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ end }}
             severity: {{ .Values.prometheus.alerts.panics.severity }}
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
             description: {{ .Values.prometheus.alerts.panics.description | toYaml }}
-
+    {{ end }}
+    
+    {{ if .Values.prometheus.alerts.metricErrors.useDefault }}
     - name: ScaleToZeroMetricError
       rules:
         - alert: ScaleToZeroControllerUnableToDetermineIfScalingRequired
           expr: |-
-            rate(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[1m])
-            * on (target_namespace) group_left(slack_channel)
-              label_replace(
-                  label_replace(
-                        kube_namespace_labels,
-                        "slack_channel",
-                        "$1", "label_spscommerce_com_slack_channel",
-                        "(.+)"
-                        ),
-                  "target_namespace",
-                  "$1", "namespace",
-                  "(.+)"
-              )
-            * on (target_namespace) group_left(pagerduty_routing_key)
-              label_replace(
-                  label_replace(
-                      kube_namespace_labels,
-                      "pagerduty_routing_key",
-                      "$1",
-                      "label_spscommerce_com_pagerduty_routing_key",
-                      "(.+)"
-                  ),
-                  "target_namespace",
-                  "$1", "namespace",
-                  "(.+)"
-              )
-            >0
+            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[2m])>0
           for: {{ .Values.prometheus.alerts.metricErrors.for }}
           labels:
             {{ if .Values.prometheus.alerts.labels }}
             {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
             {{ end }}
+            {{ if .Values.prometheus.alerts.metricErrors.labels }}
+            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ end }}            
             severity: {{ .Values.prometheus.alerts.metricErrors.severity }}
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
             description: {{ .Values.prometheus.alerts.metricErrors.description | toYaml }}
-    # We route this alert to slack_channel or PD key based on HPA namespace labels
+    {{ end }}
+    
+    {{ if .Values.prometheus.alerts.scalingErrors.useDefault }}
     - name: ScaleToZeroScalingError
       rules:
         - alert: ScaleToZeroControllerUnableToScaleDeployment
@@ -98,9 +83,14 @@ spec:
             {{ if .Values.prometheus.alerts.labels }}
             {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
             {{ end }}
+            {{ if .Values.prometheus.alerts.scalingErrors.labels }}
+            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ end }}              
             severity: {{ .Values.prometheus.alerts.scalingErrors.severity }}
           annotations:
             summary: Scale-to-zero is unable to scale HPA target
             description: {{ .Values.prometheus.alerts.scalingErrors.description | toYaml }}
+    {{ end }}
+
 {{ end }}
 {{ end }}

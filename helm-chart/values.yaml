@@ -25,19 +25,24 @@ prometheus:
   useDefault: true
   selector: cluster-prometheus
   alerts:
-    useDefault: true
     labels: {}
     panics:
+      useDefault: true
       severity: critical
       description: Unable to proceed with HPA because of panic.
       for: 1m
+      labels: {}
     metricErrors:
+      useDefault: true
       severity: warning
       description: Unable to process one of HPA metrics.
       for: 3m
+      labels: {}
     scalingErrors:
+      useDefault: true
       severity: critical
-      description: HPA target should be scaled, but error occured.
+      description: HPA target should be scaled, but error occurred.
       for: 1m
+      labels: {}
 
 
