@@ -24,25 +24,42 @@ grafana:
 prometheus:
   useDefault: true
   selector: cluster-prometheus
-  alerts:
-    labels: {}
-    panics:
-      useDefault: true
-      severity: critical
-      description: Unable to proceed with HPA because of panic.
-      for: 1m
-      labels: {}
-    metricErrors:
-      useDefault: true
-      severity: warning
-      description: Unable to process one of HPA metrics.
-      for: 3m
-      labels: {}
-    scalingErrors:
-      useDefault: true
-      severity: critical
-      description: HPA target should be scaled, but error occurred.
-      for: 1m
-      labels: {}
-
+  labels: {}
+  annotations: {}
+  alertGroups:  
+    - name: ScaleToZeroPanic
+      alerts:
+        - name: ScaleToZeroPanic
+          for: 1m
+          additionalLabels: 
+            severity: critical
+          additionalAnnotations: 
+            summary: scale-to-zero paniced 
+            description: panic occured
+          expression: |-
+            delta(scale_to_zero_panics{service="kube-hpa-scale-to-zero"}[2m])>0
+    - name: ScaleToZeroMetricError
+      alerts:
+        - name: ScaleToZeroMetricError
+          useDefault: true
+          for: 3m
+          additionalLabels: 
+            severity: warning
+          additionalAnnotations: 
+            summary: scale-to-zero unable to determine if scaling is required
+            description: Unable to process one of HPA metrics        
+          expression: |- 
+            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[2m])>0"
+    - name: ScaleToZeroScalingError
+      alerts:
+        - name: ScaleToZeroScalingError
+          useDefault: true
+          for: 1m
+          additionalLabels: 
+            severity: critical
+          additionalAnnotations: 
+            summary: scale-to-zero unable to scale 
+            description: HPA target should be scaled, but error occurred         
+          expression: |- 
+            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])>0"      
 

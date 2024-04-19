@@ -21,7 +21,7 @@ spec:
       {{- include "kube-hpa-scale-to-zero.selectorLabels" . | nindent 6 }}
       app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
 
-{{ if or .Values.prometheus.alerts.panics.useDefault .Values.prometheus.alerts.metricErrors.useDefault .Values.prometheus.alerts.scalingErrors.useDefault }}
+{{ if or .Values.prometheus.useDefault }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -32,65 +32,28 @@ metadata:
     prometheus: {{ .Values.prometheus.selector }}
 spec:
   groups:
-    {{ if .Values.prometheus.alerts.panics.useDefault }}
-    - name: ScaleToZeroPanic
+    {{ range .Values.prometheus.alertGroups }}
+    - name: {{ .name }}
       rules:
-        - alert: ScaleToZeroPanic
-          expr: |-
-            delta(scale_to_zero_panics{service="kube-hpa-scale-to-zero"}[2m])>0
-          for: {{ .Values.prometheus.alerts.panics.for }}
+        {{ range .alerts }}
+        - alert: {{.name}}
+          expr: {{ .expression }}
+          for: {{ .for }}
           labels:
-            {{ if .Values.prometheus.alerts.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ if $.Values.prometheus.labels }}
+            {{- toYaml $.Values.prometheus.labels | nindent 12 }}
             {{ end }}
-            {{ if .Values.prometheus.alerts.panics.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ if .additionalLabels }}
+            {{- toYaml .additionalLabels | nindent 12 }}
             {{ end }}
-            severity: {{ .Values.prometheus.alerts.panics.severity }}
           annotations:
-            summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.panics.description | toYaml }}
-    {{ end }}
-    
-    {{ if .Values.prometheus.alerts.metricErrors.useDefault }}
-    - name: ScaleToZeroMetricError
-      rules:
-        - alert: ScaleToZeroControllerUnableToDetermineIfScalingRequired
-          expr: |-
-            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[2m])>0
-          for: {{ .Values.prometheus.alerts.metricErrors.for }}
-          labels:
-            {{ if .Values.prometheus.alerts.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ if $.Values.prometheus.annotations }}
+            {{- toYaml $.Values.prometheus.annotations | nindent 12 }}
             {{ end }}
-            {{ if .Values.prometheus.alerts.metricErrors.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
+            {{ if .additionalAnnotations }}
+            {{- toYaml .additionalAnnotations | nindent 12 }}
             {{ end }}            
-            severity: {{ .Values.prometheus.alerts.metricErrors.severity }}
-          annotations:
-            summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.metricErrors.description | toYaml }}
+        {{ end}}
     {{ end }}
-    
-    {{ if .Values.prometheus.alerts.scalingErrors.useDefault }}
-    - name: ScaleToZeroScalingError
-      rules:
-        - alert: ScaleToZeroControllerUnableToScaleDeployment
-          expr: |-
-            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="scaling"}[2m])>0
-          for: {{ .Values.prometheus.alerts.scalingErrors.for }}
-          labels:
-            {{ if .Values.prometheus.alerts.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
-            {{ end }}
-            {{ if .Values.prometheus.alerts.scalingErrors.labels }}
-            {{- toYaml .Values.prometheus.alerts.labels | nindent 12 }}
-            {{ end }}              
-            severity: {{ .Values.prometheus.alerts.scalingErrors.severity }}
-          annotations:
-            summary: Scale-to-zero is unable to scale HPA target
-            description: {{ .Values.prometheus.alerts.scalingErrors.description | toYaml }}
-    {{ end }}
-
 {{ end }}
 {{ end }}
