@@ -21,7 +21,7 @@ spec:
       {{- include "kube-hpa-scale-to-zero.selectorLabels" . | nindent 6 }}
       app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
 
-{{ if or .Values.prometheus.useDefault }}
+{{ if .Values.prometheus.useDefault }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -32,26 +32,26 @@ metadata:
     prometheus: {{ .Values.prometheus.selector }}
 spec:
   groups:
-    {{ range .Values.prometheus.alertGroups }}
-    - name: {{ .name }}
+    {{ range $alertGroup := .Values.prometheus.alertGroups }}
+    - name: {{ $alertGroup.name }}
       rules:
-        {{ range .alerts }}
-        - alert: {{.name}}
-          expr: {{ .expression }}
-          for: {{ .for }}
+        {{ range $alert := $alertGroup.alerts }}
+        - alert: {{$alert.name}}
+          expr: {{ $alert.expression }}
+          for: {{ $alert.for }}
           labels:
             {{ if $.Values.prometheus.labels }}
             {{- toYaml $.Values.prometheus.labels | nindent 12 }}
             {{ end }}
-            {{ if .additionalLabels }}
-            {{- toYaml .additionalLabels | nindent 12 }}
+            {{ if $alert.additionalLabels }}
+            {{- toYaml $alert.additionalLabels | nindent 12 }}
             {{ end }}
           annotations:
             {{ if $.Values.prometheus.annotations }}
             {{- toYaml $.Values.prometheus.annotations | nindent 12 }}
             {{ end }}
-            {{ if .additionalAnnotations }}
-            {{- toYaml .additionalAnnotations | nindent 12 }}
+            {{ if $alert.additionalAnnotations }}
+            {{- toYaml $alert.additionalAnnotations | nindent 12 }}
             {{ end }}            
         {{ end}}
     {{ end }}
