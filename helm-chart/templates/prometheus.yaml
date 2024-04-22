@@ -34,7 +34,7 @@ spec:
       rules:
         {{ range $alert := $alertGroup.alerts }}
         - alert: {{$alert.name}}
-          expr: {{ $alert.expression }}
+          expr: {{ $alert.expression | quote }}
           for: {{ $alert.for }}
           labels:
             {{- if $.Values.prometheus.labels }}
