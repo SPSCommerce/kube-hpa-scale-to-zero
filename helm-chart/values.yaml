@@ -26,7 +26,7 @@ prometheus:
   selector: cluster-prometheus
   labels: {}
   annotations: {}
-  alertGroups:  
+  alertGroups:
     - name: ScaleToZeroPanic
       alerts:
         - name: ScaleToZeroPanic
@@ -34,14 +34,13 @@ prometheus:
           additionalLabels: 
             severity: critical
           additionalAnnotations: 
-            summary: scale-to-zero paniced 
-            description: panic occured
+            summary: scale-to-zero panicked
+            description: panic occurred
           expression: |-
             delta(scale_to_zero_panics{service="kube-hpa-scale-to-zero"}[2m])>0
     - name: ScaleToZeroMetricError
       alerts:
         - name: ScaleToZeroMetricError
-          useDefault: true
           for: 3m
           additionalLabels: 
             severity: warning
@@ -53,11 +52,10 @@ prometheus:
     - name: ScaleToZeroScalingError
       alerts:
         - name: ScaleToZeroScalingError
-          useDefault: true
           for: 1m
-          additionalLabels: 
+          additionalLabels:
             severity: critical
-          additionalAnnotations: 
+          additionalAnnotations:
             summary: scale-to-zero unable to scale 
             description: HPA target should be scaled, but error occurred         
           expression: |- 
