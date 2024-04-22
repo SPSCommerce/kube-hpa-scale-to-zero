@@ -1,5 +1,4 @@
 {{ if .Values.prometheus.useDefault }}
-
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -20,8 +19,6 @@ spec:
     matchLabels:
       {{- include "kube-hpa-scale-to-zero.selectorLabels" . | nindent 6 }}
       app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
-
-{{ if .Values.prometheus.useDefault }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -40,20 +37,19 @@ spec:
           expr: {{ $alert.expression }}
           for: {{ $alert.for }}
           labels:
-            {{ if $.Values.prometheus.labels }}
+            {{- if $.Values.prometheus.labels }}
             {{- toYaml $.Values.prometheus.labels | nindent 12 }}
-            {{ end }}
-            {{ if $alert.additionalLabels }}
+            {{- end }}
+            {{- if $alert.additionalLabels }}
             {{- toYaml $alert.additionalLabels | nindent 12 }}
-            {{ end }}
+            {{- end }}
           annotations:
-            {{ if $.Values.prometheus.annotations }}
+            {{- if $.Values.prometheus.annotations }}
             {{- toYaml $.Values.prometheus.annotations | nindent 12 }}
-            {{ end }}
-            {{ if $alert.additionalAnnotations }}
+            {{- end }}
+            {{- if $alert.additionalAnnotations }}
             {{- toYaml $alert.additionalAnnotations | nindent 12 }}
-            {{ end }}            
-        {{ end}}
+            {{- end }}            
+        {{ end }}
     {{ end }}
-{{ end }}
 {{ end }}
