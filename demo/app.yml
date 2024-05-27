@@ -59,7 +59,7 @@ metadata:
   name: scale-to-zero-demo-hpa
   namespace: integration-demo
   labels:
-    spscommerce.com/scaleToZero: "true"
+    scaletozero.spscommerce.com/watch: "true"
 spec:
   behavior:
     scaleUp:
@@ -78,7 +78,7 @@ spec:
       describedObject:
         apiVersion: apps/v1
         kind: Deployment
-        name: scale-to-zero-demo
+        name: scale-to-zero-demo-prometheus-data-generator
       metric:
         name: scale_to_zero_demo_replica_count
         selector:

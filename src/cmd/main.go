@@ -5,7 +5,6 @@ import (
 	"github.com/SPSCommerce/kube-hpa-scale-to-zero/internal"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/net/context"
 	"k8s.io/client-go/discovery/cached/disk"
 	"k8s.io/client-go/kubernetes"
@@ -14,65 +13,8 @@ import (
 	"k8s.io/metrics/pkg/client/custom_metrics"
 	"k8s.io/metrics/pkg/client/external_metrics"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 )
-
-type RunConfiguration struct {
-	KubeConfigPath string
-	HpaSelector    string
-	Port           int
-	WritePlainLogs bool
-}
-
-func ParseInputArguments(arguments []string) (*RunConfiguration, error) {
-
-	result := RunConfiguration{
-		KubeConfigPath: "",
-		HpaSelector:    "",
-		Port:           8080,
-		WritePlainLogs: false,
-	}
-
-	currentPosition := 0
-
-	for currentPosition < len(arguments) {
-
-		currentArgument := arguments[currentPosition]
-
-		if currentArgument == "--kube-config" {
-			result.KubeConfigPath = arguments[currentPosition+1]
-			currentPosition += 1
-		} else if currentArgument == "--hpa-selector" {
-			result.HpaSelector = arguments[currentPosition+1]
-			currentPosition += 1
-		} else if currentArgument == "--port" {
-			port, err := strconv.Atoi(arguments[currentPosition+1])
-			if err != nil {
-				return nil, fmt.Errorf("port has to be int, got '%s' instead", arguments[currentPosition+1])
-			}
-			result.Port = port
-			currentPosition += 1
-		} else if currentArgument == "--write-plain-logs" {
-			result.WritePlainLogs = true
-		} else {
-			return nil, fmt.Errorf("unknown argument '%s'", currentArgument)
-		}
-
-		currentPosition += 1
-	}
-
-	return &result, nil
-}
-
-func getLogEncoder(usePlain bool, config zapcore.EncoderConfig) zapcore.Encoder {
-	if usePlain {
-		return zapcore.NewConsoleEncoder(config)
-	}
-
-	return zapcore.NewJSONEncoder(config)
-}
 
 func UpEndpointHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := w.Write([]byte("happy"))
@@ -83,43 +25,12 @@ func UpEndpointHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	runtimeConfig, err := ParseInputArguments(os.Args[1:])
-	if err != nil {
-		panic(err)
-	}
+	runtimeConfig := internal.LoadConfiguration()
 
-	infoLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level <= zapcore.WarnLevel
-	})
-
-	errorLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level > zapcore.WarnLevel
-	})
-
-	stdoutSyncer := zapcore.Lock(os.Stdout)
-	stderrSyncer := zapcore.Lock(os.Stderr)
-
-	core := zapcore.NewTee(
-		zapcore.NewCore(
-			getLogEncoder(runtimeConfig.WritePlainLogs, zap.NewProductionEncoderConfig()),
-			stdoutSyncer,
-			infoLevel,
-		),
-		zapcore.NewCore(
-			getLogEncoder(runtimeConfig.WritePlainLogs, zap.NewProductionEncoderConfig()),
-			stderrSyncer,
-			errorLevel,
-		),
-	)
-
-	logger := zap.New(core).Named("Root").Sugar()
+	logger := internal.NewLogger("info", runtimeConfig.WritePlainLogs)
 	defer logger.Sync()
 
 	logger.Infof("Starting with configuration %s", runtimeConfig)
-
-	if runtimeConfig.HpaSelector == "" {
-		logger.Fatalf("HPA selector was not specified, please specify `--hpa-selector` param")
-	}
 
 	config, err := clientcmd.BuildConfigFromFlags("", runtimeConfig.KubeConfigPath)
 	if err != nil {
@@ -146,7 +57,7 @@ func main() {
 	rootCtx := context.Background()
 	ctx, _ := context.WithCancel(rootCtx)
 
-	go internal.SetupHpaInformer(ctx, logger.Named("Informer"), client, customMetricsClient, externalMetricsClient, metricsContext, runtimeConfig.HpaSelector)
+	go internal.SetupHpaInformer(ctx, logger.Named("Informer"), client, customMetricsClient, externalMetricsClient, &metricsContext, runtimeConfig.HpaSelector)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/up", http.HandlerFunc(UpEndpointHandler))
