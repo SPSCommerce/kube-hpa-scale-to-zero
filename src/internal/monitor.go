@@ -21,10 +21,182 @@ import (
 	"k8s.io/metrics/pkg/client/external_metrics"
 )
 
-func UnmarshalCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler) (*[]autoscaling.MetricStatus, error) {
-	hpaMetricsRaw := hpa.ObjectMeta.Annotations["autoscaling.alpha.kubernetes.io/current-metrics"]
+type hpaScopedContext struct {
+	context.Context
+	hpa                   *autoscaling.HorizontalPodAutoscaler
+	logger                *zap.SugaredLogger
+	kubeClient            *kubernetes.Clientset
+	customMetricsClient   custom_metrics.CustomMetricsClient
+	externalMetricsClient external_metrics.ExternalMetricsClient
+	appMetrics            *HpaScopedMetrics
+}
+
+func buildMetricsSelector(selector *metav1.LabelSelector, appMetrics *HpaScopedMetrics) (*labels.Selector, error) {
+
+	if selector == nil {
+		sel := labels.NewSelector()
+		return &sel, nil
+	}
+
+	if selector.MatchExpressions != nil {
+		appMetrics.Errors.NotSupportedError.Inc()
+		return nil, fmt.Errorf("'matchExpressions' selector is not supported")
+	}
+
+	sel, err := labels.ValidatedSelectorFromSet(selector.MatchLabels)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sel, nil
+}
+
+func requestIfObjectMetricValueIsZero(customMetricsClient custom_metrics.CustomMetricsClient, namespace string,
+	spec *autoscaling.MetricSpec,
+	appMetric *HpaScopedMetrics) (bool, error) {
+
+	selector, err := buildMetricsSelector(spec.Object.Selector, appMetric)
+
+	if err != nil {
+		return false, fmt.Errorf("not able to build selector for custom metric: %s", err)
+	}
+
+	var group string
+	if spec.Object.Target.Kind == "Service" {
+		group = ""
+	} else if spec.Object.Target.Kind == "Deployment" {
+		group = "apps"
+	} else {
+		appMetric.Errors.NotSupportedError.Inc()
+		return false, fmt.Errorf("unsupported metric target kind %s", spec.Object.Target.Kind)
+	}
+
+	result, err := customMetricsClient.NamespacedMetrics(namespace).GetForObject(schema.GroupKind{
+		Group: group,
+		Kind:  spec.Object.Target.Kind,
+	}, spec.Object.Target.Name, spec.Object.MetricName, *selector)
+
+	if err != nil {
+		return false, fmt.Errorf("not able to get metric %s from %s %s: %s", spec.Object.MetricName,
+			group,
+			spec.Object.Target.Name, err)
+	}
+
+	return result.Value.IsZero(), nil
+
+}
+
+func requestIfExternalMetricValueIsZero(externalMetricsClient external_metrics.ExternalMetricsClient,
+	namespace string,
+	spec *autoscaling.MetricSpec,
+	appMetrics *HpaScopedMetrics) (bool, error) {
+
+	selector, err := buildMetricsSelector(spec.External.MetricSelector, appMetrics)
+	if err != nil {
+		return false, fmt.Errorf("not able to build selector for external metric: %s", err)
+	}
+
+	metrics, err := externalMetricsClient.NamespacedMetrics(namespace).List(spec.External.MetricName, *selector)
+
+	if err != nil {
+		appMetrics.Errors.ExternalMetricError.Inc()
+		return false, fmt.Errorf("not able to list external metric %s: %s", spec.External.MetricName, err)
+	}
+
+	if len(metrics.Items) == 0 {
+		appMetrics.Errors.ExternalMetricError.Inc()
+		return false, fmt.Errorf("no external metric %s available", spec.External.MetricName)
+	}
+
+	if len(metrics.Items) > 1 {
+		appMetrics.Errors.NotSupportedError.Inc()
+		return false, fmt.Errorf("multiple external metrics available")
+	}
+
+	metric := metrics.Items[0]
+
+	return metric.Value.IsZero(), nil
+}
+
+func requestMetricValuesFromSpec(
+	logger *zap.SugaredLogger,
+	customMetricsClient custom_metrics.CustomMetricsClient,
+	externalMetricsClient external_metrics.ExternalMetricsClient,
+	hpa *autoscaling.HorizontalPodAutoscaler,
+	appMetrics *HpaScopedMetrics) (*[]bool, error) {
+
+	hpaMetricsRaw := hpa.ObjectMeta.Annotations["autoscaling.alpha.kubernetes.io/metrics"]
 
 	if hpaMetricsRaw == "" {
+		appMetrics.Errors.HpaStateError.Inc()
+		return nil, fmt.Errorf("hpa doesn't contain 'metrics' annotation")
+	}
+
+	var spec []autoscaling.MetricSpec
+	err := json.Unmarshal([]byte(hpaMetricsRaw), &spec)
+	if err != nil {
+		return nil, fmt.Errorf("not able to unmarshal k8s response")
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(spec))
+
+	metricValues := make(chan bool, len(spec))
+
+	for _, metric := range spec {
+
+		go func(metric *autoscaling.MetricSpec, wg *sync.WaitGroup) {
+			defer wg.Done()
+
+			if metric.Type == "Object" {
+				isZero, err := requestIfObjectMetricValueIsZero(customMetricsClient, hpa.Namespace, metric, appMetrics)
+
+				if err != nil {
+					appMetrics.Errors.CustomMetricError.Inc()
+					logger.Errorf("not able to get custom metric: %s", err)
+				} else {
+					metricValues <- isZero
+				}
+
+			} else if metric.Type == "External" {
+				isZero, err := requestIfExternalMetricValueIsZero(externalMetricsClient, hpa.Namespace, metric, appMetrics)
+
+				if err != nil {
+					appMetrics.Errors.ExternalMetricError.Inc()
+					logger.Errorf("not able to get external metric: %s", err)
+				} else {
+					metricValues <- isZero
+				}
+			} else {
+				appMetrics.Errors.NotSupportedError.Inc()
+				logger.Errorf("not supported metric type '%s'", metric.Type)
+			}
+		}(&metric, &wg)
+	}
+	wg.Wait()
+	close(metricValues)
+
+	if len(metricValues) != len(spec) {
+		return nil, fmt.Errorf("not able to get at least one of metrics")
+	}
+
+	boolResult := make([]bool, len(spec))
+	i := 0
+	for result := range metricValues {
+		boolResult[i] = result
+		i += 1
+	}
+
+	return &boolResult, nil
+}
+
+func extractMetricValuesFromCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler, appMetrics *HpaScopedMetrics) (*[]bool, error) {
+	hpaMetricsRaw := hpa.ObjectMeta.Annotations["autoscaling.alpha.kubernetes.io/current-metrics"]
+
+	print(hpaMetricsRaw)
+
+	if hpaMetricsRaw == "" {
+		appMetrics.Errors.HpaStateError.Inc()
 		return nil, fmt.Errorf("unexpected response from kube: no 'current-metrics' annotation exists")
 	}
 
@@ -34,211 +206,37 @@ func UnmarshalCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler) (*[]autos
 		return nil, fmt.Errorf("unable to unmarshal k8s response: %s", err)
 	}
 
-	return &currentMetrics, nil
-}
+	result := make([]bool, len(currentMetrics))
+	for i, metric := range currentMetrics {
 
-func UnmarshallMetricSpecs(hpa *autoscaling.HorizontalPodAutoscaler) (*[]autoscaling.MetricSpec, error) {
-	hpaMetricsRaw := hpa.ObjectMeta.Annotations["autoscaling.alpha.kubernetes.io/metrics"]
+		var isZero bool
 
-	if hpaMetricsRaw == "" {
-		return nil, fmt.Errorf("no 'metrics' annotation exists")
-	}
-
-	var metricSpecs []autoscaling.MetricSpec
-	err := json.Unmarshal([]byte(hpaMetricsRaw), &metricSpecs)
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal k8s response")
-	}
-
-	return &metricSpecs, nil
-}
-
-func BuildMetricsSelector(selector *metav1.LabelSelector) (labels.Selector, error) {
-
-	if selector == nil {
-		return labels.NewSelector(), nil
-	}
-
-	if selector.MatchExpressions != nil {
-		return nil, fmt.Errorf("metric selector 'MatchExpressions' is not supported")
-	}
-
-	return labels.ValidatedSelectorFromSet(selector.MatchLabels)
-}
-
-func RequestIfCustomMetricValueIsZero(customMetric custom_metrics.CustomMetricsClient,
-	namespace string, targetName string, spec *autoscaling.MetricSpec) (bool, error) {
-
-	if spec.Type == "Object" {
-		selector, err := BuildMetricsSelector(spec.Object.Selector)
-
-		if err != nil {
-			return false, fmt.Errorf("unable to create selector: %s", err)
+		if metric.Type == "Object" {
+			isZero = metric.Object.CurrentValue.IsZero()
+		} else if metric.Type == "External" {
+			isZero = metric.External.CurrentValue.IsZero()
+		} else {
+			appMetrics.Errors.NotSupportedError.Inc()
+			return nil, fmt.Errorf("not supported metric type %q", metric.Type)
 		}
 
-		if spec.Object.Target.Kind == "Deployment" {
-
-			result, err := customMetric.NamespacedMetrics(namespace).GetForObject(schema.GroupKind{
-				Group: "apps",
-				Kind:  "Deployment",
-			}, targetName, spec.Object.MetricName, selector)
-
-			if err != nil {
-				return false, err
-			}
-
-			return result.Value.IsZero(), nil
-		}
-
-		return false, fmt.Errorf("unsupported metric spec target kind %s", spec.Object.Target.Kind)
-	}
-
-	return false, fmt.Errorf("unsupported metric spec type '%s'", spec.Type)
-}
-
-func RequestIfExternalMetricValueIsZero(client external_metrics.ExternalMetricsClient,
-	namespace string,
-	spec *autoscaling.MetricSpec) (bool, error) {
-
-	selector, err := BuildMetricsSelector(spec.External.MetricSelector)
-	if err != nil {
-		return false, fmt.Errorf("unable to create selector: %s", err)
-	}
-
-	metrics, err := client.NamespacedMetrics(namespace).List(spec.External.MetricName, selector)
-
-	if err != nil {
-		return false, fmt.Errorf("unable list metrics: %s", err)
-	}
-
-	if len(metrics.Items) == 0 {
-		return false, fmt.Errorf("no external metrics found")
-	}
-
-	if len(metrics.Items) > 1 {
-		return false, fmt.Errorf("multiple external metric has been fetched at the same time")
-	}
-
-	metric := metrics.Items[0]
-
-	return metric.Value.IsZero(), nil
-}
-
-func RequestIfMetricValueIsZero(customMetric custom_metrics.CustomMetricsClient,
-	externalMetric external_metrics.ExternalMetricsClient,
-	spec *autoscaling.MetricSpec,
-	namespace string, targetName string) (bool, error) {
-	if spec.Type == "Object" {
-		return RequestIfCustomMetricValueIsZero(customMetric, namespace, targetName, spec)
-	} else if spec.Type == "External" {
-		return RequestIfExternalMetricValueIsZero(externalMetric, namespace, spec)
-	}
-
-	return false, fmt.Errorf("unknown metric spec type %s", spec.Type)
-}
-
-func IsMetricValueZero(status autoscaling.MetricStatus) (bool, error) {
-	if status.Type == "" {
-		return false, fmt.Errorf("metic type is empty")
-	} else if status.Type == "Object" {
-		return status.Object.CurrentValue.IsZero(), nil
-	} else if status.Type == "External" {
-		return status.External.CurrentValue.IsZero(), nil
-	}
-
-	return false, fmt.Errorf("unsupported metric type '%s'", status.Type)
-}
-
-func RequestMetricValuesFromSpec(customMetrics custom_metrics.CustomMetricsClient,
-	externalMetrics external_metrics.ExternalMetricsClient,
-	hpa *autoscaling.HorizontalPodAutoscaler) (*[]MetricValue, error) {
-
-	spec, err := UnmarshallMetricSpecs(hpa)
-
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarchall metric spec for hpa %s.%s: %s",
-			hpa.Namespace,
-			hpa.Name,
-			err)
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(len(*spec))
-
-	result := make([]MetricValue, len(*spec))
-	for i, metric := range *spec {
-
-		go func(metric *autoscaling.MetricSpec, number int, result *[]MetricValue, wg *sync.WaitGroup) {
-			defer wg.Done()
-
-			isZero, err := RequestIfMetricValueIsZero(customMetrics, externalMetrics, metric, hpa.Namespace, hpa.Spec.ScaleTargetRef.Name)
-
-			if err != nil {
-				(*result)[number] = MetricValue{
-					IsZero: false,
-					Error:  fmt.Errorf("unable to request metric: %s", err),
-				}
-			} else {
-				(*result)[number] = MetricValue{
-					IsZero: isZero,
-					Error:  nil,
-				}
-			}
-		}(&metric, i, &result, &wg)
-	}
-	wg.Wait()
-
-	return &result, nil
-}
-
-func ExtractMetricValuesFromCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler) (*[]MetricValue, error) {
-
-	currentMetrics, err := UnmarshalCurrentMetrics(hpa)
-
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal current metric: %s", err)
-	}
-
-	result := make([]MetricValue, len(*currentMetrics))
-	for i, metric := range *currentMetrics {
-		isZero, err := IsMetricValueZero(metric)
-
-		result[i] = MetricValue{
-			IsZero: isZero,
-			Error:  err,
-		}
+		result[i] = isZero
 	}
 
 	return &result, nil
 }
 
-func AnalyzeMetricValues(metricValues *[]MetricValue) (MetricsState, error) {
-	for _, response := range *metricValues {
-		if response.Error != nil {
-			return MetricsState(SomeMetricIsNotZero), response.Error
-		}
-
-		if !response.IsZero {
-			return MetricsState(SomeMetricIsNotZero), nil
+func checkAllAreZero(metricValues *[]bool) bool {
+	for _, value := range *metricValues {
+		if !value {
+			return false
 		}
 	}
 
-	return MetricsState(AllMetricsAreZero), nil
+	return true
 }
 
-func GetActualMetricsValue(customMetrics custom_metrics.CustomMetricsClient,
-	externalMetrics external_metrics.ExternalMetricsClient,
-	hpa *autoscaling.HorizontalPodAutoscaler) (*[]MetricValue, error) {
-
-	if hpa.Status.CurrentReplicas == 0 {
-		//kube will not return current values if amount of replicas is 0, so we need to check every metric manually
-		return RequestMetricValuesFromSpec(customMetrics, externalMetrics, hpa)
-	} else {
-		return ExtractMetricValuesFromCurrentMetrics(hpa)
-	}
-}
-
-func ScaleDeployment(ctx context.Context, client *kubernetes.Clientset, namespace string, deploymentName string, desiredReplicasCount int) error {
+func scaleDeployment(ctx hpaScopedContext, namespace string, deploymentName string, desiredReplicasCount int) error {
 	payload, err := json.Marshal(DeploymentReplicasPatch{
 		Spec: DeploymentReplicasSpec{
 			Replicas: desiredReplicasCount,
@@ -246,10 +244,10 @@ func ScaleDeployment(ctx context.Context, client *kubernetes.Clientset, namespac
 	})
 
 	if err != nil {
-		return fmt.Errorf("unable to generate patch")
+		return fmt.Errorf("unable to generate patch: %s", err)
 	}
 
-	_, err = client.AppsV1().Deployments(namespace).Patch(ctx, deploymentName, types.StrategicMergePatchType,
+	_, err = ctx.kubeClient.AppsV1().Deployments(namespace).Patch(ctx, deploymentName, types.StrategicMergePatchType,
 		payload, metav1.PatchOptions{})
 
 	if err != nil {
@@ -259,129 +257,116 @@ func ScaleDeployment(ctx context.Context, client *kubernetes.Clientset, namespac
 	return nil
 }
 
-func ScaleHpaTarget(ctx context.Context, client *kubernetes.Clientset, targetKind string, namespace string, targetName string, desiredReplicasCount int) error {
+func scaleHpaTarget(ctx hpaScopedContext, targetKind string, namespace string, targetName string, desiredReplicasCount int) error {
 	if targetKind == "Deployment" {
-		return ScaleDeployment(ctx, client, namespace, targetName, desiredReplicasCount)
+		return scaleDeployment(ctx, namespace, targetName, desiredReplicasCount)
+	} else {
+		// HPA supports more different kinds as `scaleTargetRef`, so far we can scale only `Deployment`
+		ctx.appMetrics.Errors.NotSupportedError.Inc()
+		return fmt.Errorf("target kind %q is not supported", targetKind)
 	}
-
-	// HPA supports more different kinds as `scaleTargetRef`, so far we can scale only `Deployment`
-	return fmt.Errorf("unexpected target kind: %s", targetKind)
 }
 
-func ActualizeHpaTargetState(
-	ctx context.Context,
-	logger *zap.SugaredLogger,
-	client *kubernetes.Clientset,
-	customMetrics custom_metrics.CustomMetricsClient,
-	externalMetrics external_metrics.ExternalMetricsClient,
-	prometheus *HpaScopedEventsMetrics,
-	hpa *autoscaling.HorizontalPodAutoscaler) *TrackableError {
+func actualizeHpaTargetState(ctx hpaScopedContext) error {
 
-	metricValues, err := GetActualMetricsValue(customMetrics, externalMetrics, hpa)
-
-	if err != nil {
-		return &TrackableError{
-			ErrorType:  ErrorTypeMetrics,
-			Msg:        "unable to fetch actual metrics",
-			InnerError: err,
-		}
+	var metricValues *[]bool
+	var err error
+	if ctx.hpa.Status.CurrentReplicas == 0 {
+		//kube will not return current values if amount of replicas is 0, so we need to check every metric manually
+		metricValues, err = requestMetricValuesFromSpec(ctx.logger, ctx.customMetricsClient, ctx.externalMetricsClient, ctx.hpa, ctx.appMetrics)
+	} else {
+		metricValues, err = extractMetricValuesFromCurrentMetrics(ctx.hpa, ctx.appMetrics)
 	}
 
-	actualMetricsState, err := AnalyzeMetricValues(metricValues)
-
 	if err != nil {
-		return &TrackableError{
-			ErrorType:  ErrorTypeMetrics,
-			Msg:        "at least one metric is in invalid state",
-			InnerError: err,
-		}
+		return err
 	}
 
-	if actualMetricsState == AllMetricsAreZero && hpa.Status.CurrentReplicas != 0 {
-		logger.Info("Should be scaled down to 0")
+	allAreZero := checkAllAreZero(metricValues)
 
-		err := ScaleHpaTarget(ctx, client, hpa.Spec.ScaleTargetRef.Kind, hpa.Namespace, hpa.Spec.ScaleTargetRef.Name, 0)
+	if allAreZero && ctx.hpa.Status.CurrentReplicas != 0 {
+		ctx.logger.Info("Should be scaled down to 0")
+
+		err := scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 0)
 
 		if err != nil {
-			return &TrackableError{
-				ErrorType:  ErrorTypeScaling,
-				Msg:        "was not able to scale to 0",
-				InnerError: err,
-			}
+			ctx.appMetrics.Errors.ScalingError.Inc()
+			return fmt.Errorf("should have been scaled in to 0")
 		} else {
-			prometheus.ScaleIn.Inc()
+			ctx.appMetrics.Events.ScaleInEvent.Inc()
 		}
-	} else if actualMetricsState == SomeMetricIsNotZero && hpa.Status.CurrentReplicas == 0 {
-		logger.Info("Should be scaled up to 1")
+	} else if !allAreZero && ctx.hpa.Status.CurrentReplicas == 0 {
+		ctx.logger.Info("Should be scaled up to 1")
 
-		err := ScaleHpaTarget(ctx, client, hpa.Spec.ScaleTargetRef.Kind, hpa.Namespace, hpa.Spec.ScaleTargetRef.Name, 1)
+		err := scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 1)
 
 		if err != nil {
-			return &TrackableError{
-				ErrorType:  ErrorTypeScaling,
-				Msg:        "was not able to scale to 1",
-				InnerError: err,
-			}
+			ctx.appMetrics.Errors.ScalingError.Inc()
+			return fmt.Errorf("should have been scaled out to 1")
 		} else {
-			prometheus.ScaleOut.Inc()
+			ctx.appMetrics.Events.ScaleOutEvent.Inc()
 		}
 	} else {
-		//logger.Debug("is in correct state")
+		//logger.Debug("nothing to do")
 	}
 
 	return nil
 }
 
-func MonitorHpa(ctx context.Context,
-	initialHpaState *autoscaling.HorizontalPodAutoscaler,
-	basicLogger *zap.SugaredLogger,
-	client *kubernetes.Clientset,
-	customMetrics custom_metrics.CustomMetricsClient,
-	externalMetrics external_metrics.ExternalMetricsClient,
-	metricsContext MetricsContext,
+func actualizeHpaState(ctx context.Context,
+	logger *zap.SugaredLogger,
+	kubeClient *kubernetes.Clientset,
+	customMetricsClient custom_metrics.CustomMetricsClient,
+	externalMetricsClient external_metrics.ExternalMetricsClient,
+	appMetrics *MetricsContext,
 	channel <-chan *autoscaling.HorizontalPodAutoscaler) {
-
-	logger := basicLogger.With("uid", initialHpaState.UID,
-		"namespace", initialHpaState.Namespace,
-		"name", initialHpaState.Name)
 
 	defer func() {
 		err := recover()
 		if err != nil {
-			metricsContext.Panics.Inc()
+			appMetrics.Overall.Panics.Inc()
 			logger.Errorf("PANIC '%s' occured at %s", err.(error), debug.Stack())
-			panic(err)
 		}
 	}()
 
-	metricsContext.RegisterNewHpa(initialHpaState.UID, initialHpaState.Namespace, initialHpaState.Name)
-
 	for hpa := range channel {
-		err := ActualizeHpaTargetState(ctx, logger, client, customMetrics, externalMetrics, metricsContext.Events[hpa.UID], hpa)
+
+		appHpaMetrics := appMetrics.Scoped[hpa.UID]
+
+		logger := logger.With("uid", hpa.UID, "namespace", hpa.Namespace, "name", hpa.Name)
+
+		ctx := hpaScopedContext{
+			Context:               ctx,
+			hpa:                   hpa,
+			logger:                logger,
+			kubeClient:            kubeClient,
+			customMetricsClient:   customMetricsClient,
+			externalMetricsClient: externalMetricsClient,
+			appMetrics:            appHpaMetrics,
+		}
+
+		err := actualizeHpaTargetState(ctx)
 
 		if err != nil {
 			// it will take some time for k8s to actualize HPA state, so we should not track these errors as real errors
 			if hpa.ObjectMeta.CreationTimestamp.Time.Add(3 * time.Minute).After(time.Now()) {
-				logger.Infof("Not able to process newly-created HPA: %s", err)
+				ctx.logger.Infof("Not able to process newly-created HPA: %s", err)
 			} else {
-				logger.Errorf("not able to process HPA: %s", err)
-				metricsContext.TrackError(hpa.UID, err)
+				ctx.logger.Errorf("not able to process HPA: %s", err)
 			}
 		}
 	}
-
-	metricsContext.DeregisterHpa(initialHpaState.UID)
 }
 
 func SetupHpaInformer(ctx context.Context,
 	logger *zap.SugaredLogger,
-	client *kubernetes.Clientset,
-	customMetrics custom_metrics.CustomMetricsClient,
-	externalMetrics external_metrics.ExternalMetricsClient,
-	metrics MetricsContext,
+	kubeClient *kubernetes.Clientset,
+	customMetricsClient custom_metrics.CustomMetricsClient,
+	externalMetricsClient external_metrics.ExternalMetricsClient,
+	appMetrics *MetricsContext,
 	hpaSelector string) {
 
-	factory := informers.NewSharedInformerFactoryWithOptions(client, 60*time.Second,
+	factory := informers.NewSharedInformerFactoryWithOptions(kubeClient, time.Minute,
 		informers.WithNamespace(metav1.NamespaceAll),
 		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
 			opts.LabelSelector = hpaSelector
@@ -389,35 +374,32 @@ func SetupHpaInformer(ctx context.Context,
 
 	hpaInformer := factory.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
 
-	go factory.Start(ctx.Done())
+	hpaQueue := make(chan *autoscaling.HorizontalPodAutoscaler)
+	go actualizeHpaState(ctx, logger, kubeClient, customMetricsClient, externalMetricsClient, appMetrics, hpaQueue)
 
+	go factory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), hpaInformer.HasSynced) {
 		logger.Fatal("timed out waiting for caches to sync")
 	}
-
-	channels := make(map[types.UID]chan *autoscaling.HorizontalPodAutoscaler)
 
 	_, err := hpaInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 
 			hpa := obj.(*autoscaling.HorizontalPodAutoscaler)
 
-			channel := make(chan *autoscaling.HorizontalPodAutoscaler)
+			logger.Infow("New hpa has been detected", "uid", hpa.UID)
 
-			channels[hpa.UID] = channel
-
-			logger.Infow("New hpa has been detected ", "uid", hpa.UID)
-			go MonitorHpa(ctx, hpa, logger.Named("HpaMonitor"), client, customMetrics, externalMetrics, metrics, channel)
+			appMetrics.RegisterNewHpa(hpa.UID, hpa.Name, hpa.Namespace)
+			hpaQueue <- hpa
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			hpa := newObj.(*autoscaling.HorizontalPodAutoscaler)
-			channels[hpa.UID] <- hpa
+			hpaQueue <- hpa
 		},
 		DeleteFunc: func(obj interface{}) {
 			hpa := obj.(*autoscaling.HorizontalPodAutoscaler)
 
-			close(channels[hpa.UID])
-			delete(channels, hpa.UID)
+			appMetrics.DeregisterHpa(hpa.UID)
 
 			logger.Infow("Monitoring has been stopped", "uid", hpa.UID)
 		},

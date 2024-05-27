@@ -48,7 +48,7 @@ prometheus:
             summary: scale-to-zero unable to determine if scaling is required
             description: Unable to process one of HPA metrics        
           expression: |- 
-            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type="metric"}[2m])>0"
+            delta(scale_to_zero_errors{service="kube-hpa-scale-to-zero", type!="scaling"}[2m])>0"
     - name: ScaleToZeroScalingError
       alerts:
         - name: ScaleToZeroScalingError

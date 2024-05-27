@@ -17,14 +17,14 @@ data:
             values: 0-2
             operation: set
             labels:
-              deployment: scale-to-zero-demo
+              deployment: scale-to-zero-demo-prometheus-data-generator
               facet: 1
           - time: 5
             eval_time: 60
             values: 0-2
             operation: set
             labels:
-              deployment: scale-to-zero-demo2
+              deployment: scale-to-zero-demo-prometheus-data-generator
               facet: 2    
       - name: scale_to_zero_demo_replica_count_external
         description: The number of we wanna have.
