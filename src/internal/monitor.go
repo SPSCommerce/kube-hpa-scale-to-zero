@@ -193,8 +193,6 @@ func requestMetricValuesFromSpec(
 func extractMetricValuesFromCurrentMetrics(hpa *autoscaling.HorizontalPodAutoscaler, appMetrics *HpaScopedMetrics) (*[]bool, error) {
 	hpaMetricsRaw := hpa.ObjectMeta.Annotations["autoscaling.alpha.kubernetes.io/current-metrics"]
 
-	print(hpaMetricsRaw)
-
 	if hpaMetricsRaw == "" {
 		appMetrics.Errors.HpaStateError.Inc()
 		return nil, fmt.Errorf("unexpected response from kube: no 'current-metrics' annotation exists")
@@ -389,7 +387,7 @@ func SetupHpaInformer(ctx context.Context,
 
 			logger.Infow("New hpa has been detected", "uid", hpa.UID)
 
-			appMetrics.RegisterNewHpa(hpa.UID, hpa.Name, hpa.Namespace)
+			appMetrics.RegisterNewHpa(hpa.UID, hpa.Namespace, hpa.Name)
 			hpaQueue <- hpa
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
