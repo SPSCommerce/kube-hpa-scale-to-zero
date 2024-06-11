@@ -108,14 +108,13 @@ func requestIfExternalMetricValueIsZero(externalMetricsClient external_metrics.E
 		return false, fmt.Errorf("no external metric %s available", spec.External.MetricName)
 	}
 
-	if len(metrics.Items) > 1 {
-		appMetrics.Errors.NotSupportedError.Inc()
-		return false, fmt.Errorf("multiple external metrics available")
+	for _, metric := range metrics.Items {
+		if !metric.Value.IsZero() {
+			return false, nil
+		}
 	}
 
-	metric := metrics.Items[0]
-
-	return metric.Value.IsZero(), nil
+	return true, nil
 }
 
 func requestMetricValuesFromSpec(
