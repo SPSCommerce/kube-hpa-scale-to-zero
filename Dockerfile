@@ -1,5 +1,5 @@
 FROM golang:1.22.0
-COPY ./src /sources
+COPY . /sources
 WORKDIR /sources
 RUN go build -ldflags "-s" -o run ./cmd
 
