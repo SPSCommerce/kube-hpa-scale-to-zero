@@ -3,11 +3,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	"github.com/go-logr/logr"
+	"os"
 	"runtime/debug"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	autoscaling "k8s.io/api/autoscaling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -24,7 +25,7 @@ import (
 type hpaScopedContext struct {
 	context.Context
 	hpa                   *autoscaling.HorizontalPodAutoscaler
-	logger                *zap.SugaredLogger
+	logger                *logr.Logger
 	kubeClient            *kubernetes.Clientset
 	customMetricsClient   custom_metrics.CustomMetricsClient
 	externalMetricsClient external_metrics.ExternalMetricsClient
@@ -118,7 +119,7 @@ func requestIfExternalMetricValueIsZero(externalMetricsClient external_metrics.E
 }
 
 func requestMetricValuesFromSpec(
-	logger *zap.SugaredLogger,
+	logger *logr.Logger,
 	customMetricsClient custom_metrics.CustomMetricsClient,
 	externalMetricsClient external_metrics.ExternalMetricsClient,
 	hpa *autoscaling.HorizontalPodAutoscaler,
@@ -152,7 +153,7 @@ func requestMetricValuesFromSpec(
 
 				if err != nil {
 					appMetrics.Errors.CustomMetricError.Inc()
-					logger.Errorf("not able to get custom metric: %s", err)
+					logger.Error(err, "not able to get custom metric")
 				} else {
 					metricValues <- isZero
 				}
@@ -162,13 +163,13 @@ func requestMetricValuesFromSpec(
 
 				if err != nil {
 					appMetrics.Errors.ExternalMetricError.Inc()
-					logger.Errorf("not able to get external metric: %s", err)
+					logger.Error(err, "not able to get external metric")
 				} else {
 					metricValues <- isZero
 				}
 			} else {
 				appMetrics.Errors.NotSupportedError.Inc()
-				logger.Errorf("not supported metric type '%s'", metric.Type)
+				logger.Error(nil, fmt.Sprintf("not supported metric type '%s'", metric.Type))
 			}
 		}(&metric, &wg)
 	}
@@ -311,7 +312,7 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 }
 
 func actualizeHpaState(ctx context.Context,
-	logger *zap.SugaredLogger,
+	logger *logr.Logger,
 	kubeClient *kubernetes.Clientset,
 	customMetricsClient custom_metrics.CustomMetricsClient,
 	externalMetricsClient external_metrics.ExternalMetricsClient,
@@ -322,7 +323,7 @@ func actualizeHpaState(ctx context.Context,
 		err := recover()
 		if err != nil {
 			appMetrics.Overall.Panics.Inc()
-			logger.Errorf("PANIC '%s' occured at %s", err.(error), debug.Stack())
+			logger.Error(err.(error), "PANIC occured at %s", debug.Stack())
 		}
 	}()
 
@@ -330,12 +331,12 @@ func actualizeHpaState(ctx context.Context,
 
 		appHpaMetrics := appMetrics.Scoped[hpa.UID]
 
-		logger := logger.With("uid", hpa.UID, "namespace", hpa.Namespace, "name", hpa.Name)
+		hpaLogger := logger.WithValues("uid", hpa.UID, "namespace", hpa.Namespace, "name", hpa.Name)
 
 		ctx := hpaScopedContext{
 			Context:               ctx,
 			hpa:                   hpa,
-			logger:                logger,
+			logger:                &hpaLogger,
 			kubeClient:            kubeClient,
 			customMetricsClient:   customMetricsClient,
 			externalMetricsClient: externalMetricsClient,
@@ -347,16 +348,16 @@ func actualizeHpaState(ctx context.Context,
 		if err != nil {
 			// it will take some time for k8s to actualize HPA state, so we should not track these errors as real errors
 			if hpa.ObjectMeta.CreationTimestamp.Time.Add(3 * time.Minute).After(time.Now()) {
-				ctx.logger.Infof("Not able to process newly-created HPA: %s", err)
+				ctx.logger.Info(fmt.Sprintf("Not able to process newly-created HPA: %s", err))
 			} else {
-				ctx.logger.Errorf("not able to process HPA: %s", err)
+				ctx.logger.Error(err, "not able to process HPA: %s")
 			}
 		}
 	}
 }
 
 func SetupHpaInformer(ctx context.Context,
-	logger *zap.SugaredLogger,
+	logger *logr.Logger,
 	kubeClient *kubernetes.Clientset,
 	customMetricsClient custom_metrics.CustomMetricsClient,
 	externalMetricsClient external_metrics.ExternalMetricsClient,
@@ -376,7 +377,8 @@ func SetupHpaInformer(ctx context.Context,
 
 	go factory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), hpaInformer.HasSynced) {
-		logger.Fatal("timed out waiting for caches to sync")
+		logger.Error(nil, "timed out waiting for caches to sync")
+		os.Exit(1)
 	}
 
 	_, err := hpaInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -384,7 +386,7 @@ func SetupHpaInformer(ctx context.Context,
 
 			hpa := obj.(*autoscaling.HorizontalPodAutoscaler)
 
-			logger.Infow("New hpa has been detected", "uid", hpa.UID)
+			logger.Info("New hpa has been detected", "uid", hpa.UID)
 
 			appMetrics.RegisterNewHpa(hpa.UID, hpa.Namespace, hpa.Name)
 			hpaQueue <- hpa
@@ -398,12 +400,13 @@ func SetupHpaInformer(ctx context.Context,
 
 			appMetrics.DeregisterHpa(hpa.UID)
 
-			logger.Infow("Monitoring has been stopped", "uid", hpa.UID)
+			logger.Info("Monitoring has been stopped", "uid", hpa.UID)
 		},
 	})
 
 	if err != nil {
-		logger.Fatalf("Unable to subscribe to k8s events: %s", err)
+		logger.Error(err, "Unable to subscribe to k8s events")
+		os.Exit(1)
 	}
 
 	<-ctx.Done()
