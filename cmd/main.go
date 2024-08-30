@@ -72,7 +72,7 @@ func main() {
 
 	config, err := clientcmd.BuildConfigFromFlags("", runtimeConfig.KubeConfigPath)
 	if err != nil {
-		logger.Error(err, "Unable to create kubernetes config")
+		logger.Error(err, "unable to create kubernetes config")
 		os.Exit(1)
 	}
 
@@ -82,11 +82,18 @@ func main() {
 		time.Second)
 
 	if err != nil {
-		logger.Error(err, "Unable to create kubernetes discovery client")
+		logger.Error(err, "unable to create kubernetes discovery client")
+		os.Exit(1)
 	}
 
 	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
 
+	apiGetter := custom_metrics.NewAvailableAPIsGetter(discoveryClient)
+	_, err = apiGetter.PreferredVersion()
+	if err != nil {
+		logger.Error(err, "unable to discover custom metrics api")
+		os.Exit(1)
+	}
 	customMetricsClient := custom_metrics.NewForConfig(config, restMapper, custom_metrics.NewAvailableAPIsGetter(discoveryClient))
 
 	externalMetricsClient := external_metrics.NewForConfigOrDie(config)
