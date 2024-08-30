@@ -91,12 +91,10 @@ func main() {
 
 	externalMetricsClient := external_metrics.NewForConfigOrDie(config)
 
-	metricsContext := internal.RegisterMetricsContext("scale_to_zero")
-
 	ctx := context.Background()
 
 	informerLog := logger.WithName("Informer")
-	go internal.SetupHpaInformer(ctx, &informerLog, client, customMetricsClient, externalMetricsClient, &metricsContext, runtimeConfig.HpaSelector)
+	go internal.SetupHpaInformer(ctx, &informerLog, client, customMetricsClient, externalMetricsClient, runtimeConfig.HpaSelector)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/up", http.HandlerFunc(UpEndpointHandler))
