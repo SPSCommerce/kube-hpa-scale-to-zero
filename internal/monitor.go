@@ -369,8 +369,8 @@ func SetupHpaInformer(ctx context.Context,
 	_, err := hpaInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			hpa := obj.(*autoscaling.HorizontalPodAutoscaler)
-
 			logger.Info("New hpa has been detected", "uid", hpa.UID)
+			metrics.HpaAmount.Inc()
 			hpaQueue <- hpa
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -380,6 +380,7 @@ func SetupHpaInformer(ctx context.Context,
 		DeleteFunc: func(obj interface{}) {
 			hpa := obj.(*autoscaling.HorizontalPodAutoscaler)
 			logger.Info("Monitoring has been stopped", "uid", hpa.UID)
+			metrics.HpaAmount.Desc()
 		},
 	})
 
