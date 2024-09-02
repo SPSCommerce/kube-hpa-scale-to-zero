@@ -3,4 +3,4 @@ name: kube-hpa-scale-to-zero
 description: https://github.com/SPSCommerce/kube-hpa-scale-to-zero
 type: application
 version: 0.10.4
-appVersion: "0.8.2"
+appVersion: "0.8.3"

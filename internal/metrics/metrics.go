@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
@@ -38,26 +38,28 @@ func ReportScalingError(namespace string, volumeType string) {
 }
 
 func init() {
-	HpaAmount = prometheus.NewGauge(
+	HpaAmount = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "total_hpa",
+			Namespace: "scale_to_zero",
+			Name:      "total_hpa",
 		})
-	Panics = prometheus.NewCounter(
+	Panics = promauto.NewCounter(
 		prometheus.CounterOpts{
-			Name: "panics",
+			Namespace: "scale_to_zero",
+			Name:      "panics",
 		})
 
-	eventsMetric = prometheus.NewCounterVec(
+	eventsMetric = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "events",
+			Namespace: "scale_to_zero",
+			Name:      "events",
 		},
 		[]string{"target_namespace", "target_hpa", "type"})
 
-	errorsMetric = prometheus.NewCounterVec(
+	errorsMetric = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "errors",
+			Namespace: "scale_to_zero",
+			Name:      "errors",
 		},
 		[]string{"target_namespace", "target_hpa", "type"})
-
-	metrics.Registry.MustRegister(HpaAmount, Panics, errorsMetric, eventsMetric)
 }
