@@ -34,17 +34,17 @@ func ReportExternalMetricError(namespace string, volumeType string) {
 	errorsMetric.WithLabelValues(namespace, volumeType, "external_metric").Inc()
 }
 func ReportScalingError(namespace string, volumeType string) {
-	errorsMetric.WithLabelValues(namespace, volumeType, "scaling_error").Inc()
+	errorsMetric.WithLabelValues(namespace, volumeType, "scaling").Inc()
 }
 
 func init() {
 	HpaAmount = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "panics",
+			Name: "total_hpa",
 		})
 	Panics = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "total_hpa",
+			Name: "panics",
 		})
 
 	eventsMetric = prometheus.NewCounterVec(
