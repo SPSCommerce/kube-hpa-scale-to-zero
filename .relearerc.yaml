@@ -1,0 +1,28 @@
+tagFormat: v${version}
+
+plugins:
+  - "@semantic-release/github"
+
+  - - "@semantic-release/commit-analyzer"
+    - preset: conventionalcommits
+
+  - - "@semantic-release/release-notes-generator"
+    - preset: conventionalcommits
+
+  - - "@google/semantic-release-replace-plugin"
+    - replacements:
+        - files: "deployment/helm-chart/Chart.yaml"
+          allowEmptyPaths: false
+          disableGlobs: false
+          from: "^appVersion: .*"
+          to: "appVersion: ${nextRelease.version}"
+        - files: "deployment/helm-chart/Chart.yaml"
+          allowEmptyPaths: false
+          disableGlobs: false
+          from: "^version: .*"
+          to: "version: ${nextRelease.version}"
+
+  - - "@semantic-release/git"
+    - message: "bump version: ${nextRelease.version}"
+      assets:
+        - "deployment/helm-chart/Chart.yaml"
