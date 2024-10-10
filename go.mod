@@ -11,7 +11,7 @@ require (
 	golang.org/x/net v0.26.0
 	k8s.io/api v0.31.1
 	k8s.io/apimachinery v0.31.1
-	k8s.io/client-go v0.31.0
+	k8s.io/client-go v0.31.1
 	k8s.io/metrics v0.30.1
 	sigs.k8s.io/controller-runtime v0.19.0
 )
