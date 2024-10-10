@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - 'main'
+    paths-ignore:
+      - .github/**
+      - demo/**
+      - LICENCE
+      - Readme.md
+      - .gitignore
+      - .dockerignore
+      - .releaserc.yaml
 
 jobs:
   push-app:
