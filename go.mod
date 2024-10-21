@@ -6,7 +6,7 @@ toolchain go1.22.2
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/prometheus/client_golang v1.20.4
+	github.com/prometheus/client_golang v1.20.5
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.30.0
 	k8s.io/api v0.31.1
