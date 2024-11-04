@@ -157,6 +157,9 @@ func requestMetricValuesFromSpec(ctx hpaScopedContext) (*[]bool, error) {
 				} else {
 					metricValues <- isZero
 				}
+			} else if metric.Type == "" {
+				metrics.ReportBadHpaState(ctx.hpa.Namespace, ctx.hpa.Name)
+				ctx.logger.Error(nil, fmt.Sprintf("unexpected response: hpa returned metric definition with no type"))
 			} else {
 				metrics.ReportNotSupported(ctx.hpa.Namespace, ctx.hpa.Name)
 				ctx.logger.Error(nil, fmt.Sprintf("not supported metric type '%s'", metric.Type))
@@ -203,6 +206,9 @@ func extractMetricValuesFromCurrentMetrics(hpa *autoscaling.HorizontalPodAutosca
 			isZero = metric.Object.CurrentValue.IsZero()
 		} else if metric.Type == "External" {
 			isZero = metric.External.CurrentValue.IsZero()
+		} else if metric.Type == "" {
+			metrics.ReportBadHpaState(hpa.Namespace, hpa.Name)
+			return nil, fmt.Errorf("unexpected response: hpa returned metric with no type")
 		} else {
 			metrics.ReportNotSupported(hpa.Namespace, hpa.Name)
 			return nil, fmt.Errorf("not supported metric type %q", metric.Type)
@@ -262,12 +268,16 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 	if ctx.hpa.Status.CurrentReplicas == 0 {
 		//kube will not return current values if amount of replicas is 0, so we need to check every metric manually
 		metricValues, err = requestMetricValuesFromSpec(ctx)
+
+		if err != nil {
+			return fmt.Errorf("unable to determine if scaling from 0 is required: %s", err)
+		}
 	} else {
 		metricValues, err = extractMetricValuesFromCurrentMetrics(ctx.hpa)
-	}
 
-	if err != nil {
-		return err
+		if err != nil {
+			return fmt.Errorf("unable to determine if scaling to 0 is required: %s", err)
+		}
 	}
 
 	allAreZero := checkAllAreZero(metricValues)
@@ -336,7 +346,7 @@ func actualizeHpaState(ctx context.Context,
 			if hpa.ObjectMeta.CreationTimestamp.Time.Add(3 * time.Minute).After(time.Now()) {
 				ctx.logger.Info(fmt.Sprintf("Not able to process newly-created HPA: %s", err))
 			} else {
-				ctx.logger.Error(err, "not able to process HPA: %s")
+				ctx.logger.Error(err, "not able to process HPA")
 			}
 		}
 	}
