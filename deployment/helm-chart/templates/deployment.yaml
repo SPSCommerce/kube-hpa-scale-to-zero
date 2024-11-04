@@ -21,7 +21,7 @@ spec:
       serviceAccountName: {{ .Values.rbac.serviceAccountName }}
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.pod.repository }}:{{ .Values.pod.version }}"
+          image: "{{ .Values.pod.repository }}:{{ .Values.pod.version | default .Chart.AppVersion }}"
           imagePullPolicy: IfNotPresent
           args:
             - --hpa-selector
