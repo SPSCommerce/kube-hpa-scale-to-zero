@@ -24,8 +24,8 @@ func ReportNotSupported(namespace string, hpaName string) {
 	errorsMetric.WithLabelValues(namespace, hpaName, "not_supported").Inc()
 }
 
-func ReportBadHpaState(namespace string, volumeType string) {
-	errorsMetric.WithLabelValues(namespace, volumeType, "hpa_state").Inc()
+func ReportBadHpaState(namespace string, hpaName string) {
+	errorsMetric.WithLabelValues(namespace, hpaName, "hpa_state").Inc()
 }
 func ReportCustomMetricError(namespace string, volumeType string) {
 	errorsMetric.WithLabelValues(namespace, volumeType, "custom_metric").Inc()
