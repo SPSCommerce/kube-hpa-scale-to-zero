@@ -6,6 +6,7 @@ Until then - you have either use something like KEDA, or implement it by yoursel
 - Only `Object` and `External` metrics are supported
 - Only `Deployment` is supported as HPA target
 - Metric selector `MatchExpressions` is not supported
+- HPA's `stabilizationWindow` is not being respected, scaling from/to 0 will be done asap 
 
 ### Architecture overview
 ```mermaid
