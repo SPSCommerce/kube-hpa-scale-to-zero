@@ -16,6 +16,8 @@ pod:
     requests:
       cpu: 50m
       memory: 50Mi
+  affinity: {}
+  tolerations: []
 
 grafana:
   useDefault: true

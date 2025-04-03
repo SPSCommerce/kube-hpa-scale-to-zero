@@ -19,6 +19,14 @@ spec:
         app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
     spec:
       serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      {{- with .Values.pod.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.pod.repository }}:{{ .Values.pod.version | default .Chart.AppVersion }}"
