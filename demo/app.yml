@@ -24,7 +24,6 @@ spec:
     spec:
       containers:
       - image: nginx:1.29.1
-      #- image: 602068278189.dkr.ecr.us-east-2.amazonaws.com/docker.io/library/nginx:1.29.1
         imagePullPolicy: Always
         name: scale-to-zero-demo
         resources:

@@ -251,9 +251,6 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 	var metricValues *[]bool
 	var err error
 
-	// Check if able to scale in status
-	//ctx.logger.Info("HPA conditions", "conditions", ctx.hpa)
-
 	if ctx.hpa.Status.CurrentReplicas == 0 {
 		//kube will not return current values if amount of replicas is 0, so we need to check every metric manually
 		metricValues, err = requestMetricValuesFromSpec(ctx)
@@ -273,7 +270,6 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 
 	if allAreZero && ctx.hpa.Status.CurrentReplicas != 0 {
 		ctx.logger.Info("Should be scaled down to 0")
-		ctx.logger.Info("HPA conditions", "conditions", ctx.hpa)
 		err := scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 0)
 
 		if err != nil {
