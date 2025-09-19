@@ -133,7 +133,7 @@ func requestMetricValuesFromSpec(ctx hpaScopedContext) (*[]bool, error) {
 				isZero, err := requestIfObjectMetricValueIsZero(ctx, metric)
 
 				if err != nil {
-					metrics.ReportCustomMetricError(ctx.hpa.Namespace, ctx.hpa.Name)
+					metrics.ReportObjectMetricError(ctx.hpa.Namespace, ctx.hpa.Name)
 					ctx.logger.Error(err, "not able to get object metric")
 				} else {
 					metricValues <- isZero
