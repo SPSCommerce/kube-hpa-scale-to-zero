@@ -8,7 +8,7 @@ data:
     ---
     config:
       - name: scale_to_zero_demo_replica_count
-        description: The number of we wanna have. 
+        description: The number of we wanna have.
         type: gauge
         labels: [deployment, facet]
         sequence:
