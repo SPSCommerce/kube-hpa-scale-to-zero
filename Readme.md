@@ -45,8 +45,8 @@ scale_to_zero_panics
 ### Howto test locally
 You can install demo services from the `./demo` folder
 ```
-kubectl apply -f app.yml -n integration-demo
-kubectl apply -f metric-generator.yml -n integration-demo
+kubectl apply -f app.yml -n default
+kubectl apply -f metric-generator.yml -n default
 ```
 to have multiple deployments with multiple random metrics bouncing between 0 and 1
 
