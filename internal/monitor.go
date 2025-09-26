@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
-
 	metrics "github.com/SPSCommerce/kube-hpa-scale-to-zero/internal/metrics"
+	"github.com/go-logr/logr"
 	autoscaling "k8s.io/api/autoscaling/v2"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -28,7 +28,7 @@ type hpaScopedContext struct {
 	context.Context
 	hpa                   *autoscaling.HorizontalPodAutoscaler
 	logger                *logr.Logger
-	kubeClient            *kubernetes.Clientset
+	kubeClient            kubernetes.Interface
 	customMetricsClient   custom_metrics.CustomMetricsClient
 	externalMetricsClient external_metrics.ExternalMetricsClient
 }
@@ -252,6 +252,47 @@ func scaleHpaTarget(ctx hpaScopedContext, targetKind string, namespace string, t
 	}
 }
 
+func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
+	// If replicas >0 we should be able to identify if scaling is allowed by behaviour from status.conditions
+	if ctx.hpa.Spec.Behavior != nil &&
+		ctx.hpa.Spec.Behavior.ScaleDown != nil &&
+		ctx.hpa.Spec.Behavior.ScaleDown.StabilizationWindowSeconds != nil {
+		for _, condition := range ctx.hpa.Status.Conditions {
+			if condition.Type == "AbleToScale" && condition.Status == v1.ConditionTrue {
+				return true, nil
+			} else if condition.Type == "AbleToScale" && condition.Status == v1.ConditionFalse {
+				return false, nil
+			}
+		}
+	} else {
+		return true, nil
+	}
+	return false, fmt.Errorf("Could not determine if scaling is allowed")
+}
+
+func allowedToScaleUp(ctx hpaScopedContext) (bool, error) {
+	if ctx.hpa.Spec.Behavior != nil &&
+		ctx.hpa.Spec.Behavior.ScaleUp != nil &&
+		ctx.hpa.Spec.Behavior.ScaleUp.StabilizationWindowSeconds != nil {
+		// If current number of replicas is zero, HPA scaling is disabled, thus we have to identify somehow if scaling up is allowed
+		for _, condition := range ctx.hpa.Status.Conditions {
+			if condition.Type == "ScalingActive" && condition.Status == v1.ConditionFalse && condition.Reason == "ScalingDisabled" {
+				// That is the time when HPA's target was scaled to zero
+				lastTransitionTime := condition.LastTransitionTime
+				elapsedTime := time.Since(lastTransitionTime.Time)
+				stabilizationWindow := time.Duration(*ctx.hpa.Spec.Behavior.ScaleUp.StabilizationWindowSeconds) * time.Second
+				if elapsedTime >= stabilizationWindow {
+					return true, nil
+				}
+				return false, nil
+			}
+		}
+	} else {
+		return true, nil
+	}
+	return false, fmt.Errorf("Could not determine if scaling is allowed")
+}
+
 func actualizeHpaTargetState(ctx hpaScopedContext) error {
 
 	var metricValues *[]bool
@@ -275,28 +316,46 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 	allAreZero := checkAllAreZero(metricValues)
 
 	if allAreZero && ctx.hpa.Status.CurrentReplicas != 0 {
-		ctx.logger.Info("Should be scaled down to 0")
-		err := scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 0)
-
+		allowed, err := allowedToScaleDown(ctx)
 		if err != nil {
 			metrics.ReportScalingError(ctx.hpa.Namespace, ctx.hpa.Name)
-			return fmt.Errorf("should have been scaled in to 0")
+			return fmt.Errorf("Couldn't identify if scaling is allowed")
+		}
+		if allowed {
+			ctx.logger.Info("Should be scaled down to 0")
+
+			err = scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 0)
+
+			if err != nil {
+				metrics.ReportScalingError(ctx.hpa.Namespace, ctx.hpa.Name)
+				return fmt.Errorf("should have been scaled in to 0")
+			} else {
+				metrics.ReportScaleIn(ctx.hpa.Namespace, ctx.hpa.Name)
+			}
 		} else {
-			metrics.ReportScaleIn(ctx.hpa.Namespace, ctx.hpa.Name)
+			fmt.Println("Scaling Down is not allowed by behaviour") // TODO delete afterwards
 		}
 	} else if !allAreZero && ctx.hpa.Status.CurrentReplicas == 0 {
-		ctx.logger.Info("Should be scaled up to 1")
-
-		err := scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 1)
-
+		allowed, err := allowedToScaleUp(ctx)
 		if err != nil {
 			metrics.ReportScalingError(ctx.hpa.Namespace, ctx.hpa.Name)
-			return fmt.Errorf("should have been scaled out to 1")
+			return fmt.Errorf("Couldn't identify if scaling is allowed")
+		}
+		if allowed {
+			ctx.logger.Info("Should be scaled up to 1")
+			err = scaleHpaTarget(ctx, ctx.hpa.Spec.ScaleTargetRef.Kind, ctx.hpa.Namespace, ctx.hpa.Spec.ScaleTargetRef.Name, 1)
+
+			if err != nil {
+				metrics.ReportScalingError(ctx.hpa.Namespace, ctx.hpa.Name)
+				return fmt.Errorf("should have been scaled out to 1")
+			} else {
+				metrics.ReportScaleOut(ctx.hpa.Namespace, ctx.hpa.Name)
+			}
 		} else {
-			metrics.ReportScaleOut(ctx.hpa.Namespace, ctx.hpa.Name)
+			fmt.Println("Scaling Up is not allowed by behaviour") // TODO delete afterwards
 		}
 	} else {
-		//logger.Debug("nothing to do")
+
 	}
 
 	return nil
@@ -304,7 +363,7 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 
 func actualizeHpaState(ctx context.Context,
 	logger *logr.Logger,
-	kubeClient *kubernetes.Clientset,
+	kubeClient kubernetes.Interface,
 	customMetricsClient custom_metrics.CustomMetricsClient,
 	externalMetricsClient external_metrics.ExternalMetricsClient,
 	channel <-chan *autoscaling.HorizontalPodAutoscaler) {
@@ -344,7 +403,7 @@ func actualizeHpaState(ctx context.Context,
 
 func SetupHpaInformer(ctx context.Context,
 	logger *logr.Logger,
-	kubeClient *kubernetes.Clientset,
+	kubeClient kubernetes.Interface,
 	customMetricsClient custom_metrics.CustomMetricsClient,
 	externalMetricsClient external_metrics.ExternalMetricsClient,
 	hpaSelector string) {
