@@ -184,9 +184,12 @@ func extractMetricValuesFromCurrentMetrics(hpa *autoscaling.HorizontalPodAutosca
 		var isZero bool
 
 		if metric.Type == "Object" {
-			if metric.Object.Current.Value != nil {
-				isZero = metric.Object.Current.Value.IsZero()
+			if metric.Object.Current.Value == nil {
+				metrics.ReportBadHpaState(hpa.Namespace, hpa.Name)
+				return nil, fmt.Errorf("unexpected state: object metric value is nil")
 			}
+
+			isZero = metric.Object.Current.Value.IsZero()
 		} else if metric.Type == "External" {
 			if metric.External.Current.Value == nil {
 				metrics.ReportBadHpaState(hpa.Namespace, hpa.Name)
