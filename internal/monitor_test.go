@@ -17,9 +17,6 @@ import (
 	v1beta1 "k8s.io/metrics/pkg/apis/external_metrics/v1beta1"
 	fakecustommetrics "k8s.io/metrics/pkg/client/custom_metrics/fake"
 	fakeexternalmetrics "k8s.io/metrics/pkg/client/external_metrics/fake"
-	//informers "k8s.io/client-go/informers"
-	//k8stesting "k8s.io/client-go/testing"
-	//"k8s.io/client-go/tools/cache"
 )
 
 func CreateTestHPA(minReplicas *int32, maxReplicas int32, quantity int64, behaviour *autoscalingv2.HorizontalPodAutoscalerBehavior, conditions []autoscalingv2.HorizontalPodAutoscalerCondition) *autoscalingv2.HorizontalPodAutoscaler {

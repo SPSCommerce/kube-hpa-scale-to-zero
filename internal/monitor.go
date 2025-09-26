@@ -133,7 +133,7 @@ func requestMetricValuesFromSpec(ctx hpaScopedContext) (*[]bool, error) {
 				isZero, err := requestIfObjectMetricValueIsZero(ctx, metric)
 
 				if err != nil {
-					metrics.ReportObjectMetricError(ctx.hpa.Namespace, ctx.hpa.Name)
+					metrics.ReportCustomMetricError(ctx.hpa.Namespace, ctx.hpa.Name)
 					ctx.logger.Error(err, "not able to get object metric")
 				} else {
 					metricValues <- isZero
@@ -332,8 +332,6 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 			} else {
 				metrics.ReportScaleIn(ctx.hpa.Namespace, ctx.hpa.Name)
 			}
-		} else {
-			fmt.Println("Scaling Down is not allowed by behaviour") // TODO delete afterwards
 		}
 	} else if !allAreZero && ctx.hpa.Status.CurrentReplicas == 0 {
 		allowed, err := allowedToScaleUp(ctx)
@@ -351,8 +349,6 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 			} else {
 				metrics.ReportScaleOut(ctx.hpa.Namespace, ctx.hpa.Name)
 			}
-		} else {
-			fmt.Println("Scaling Up is not allowed by behaviour") // TODO delete afterwards
 		}
 	} else {
 
