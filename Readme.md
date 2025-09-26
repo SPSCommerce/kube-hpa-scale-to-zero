@@ -62,4 +62,4 @@ kubectl apply -f metric-generator.yml -n default
 to have multiple deployments with multiple random metrics bouncing between 0 and 1
 
 Now you can run service locally to scale services in a real kube cluster:
-`go run ./cmd --kube-config "<path to your kube config>" --write-plain-logs --hpa-selector "scaleToZero.spscommerce.com/watch=true"`
+`go run ./cmd --kube-config "<path to your kube config>" --hpa-selector "scaleToZero.spscommerce.com/watch=true"`
