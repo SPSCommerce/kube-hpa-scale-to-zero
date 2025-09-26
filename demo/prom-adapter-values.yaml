@@ -1,0 +1,40 @@
+# https://github.com/helm/charts/tree/master/stable/prometheus-adapter
+prometheus:
+  url: http://prometheus-kube-prometheus-prometheus.default.svc.cluster.local
+  port: 9090
+
+# https://github.com/helm/charts/tree/master/stable/prometheus-adapter
+rules:
+  default: false
+  # a couple of the default rules don't play well with cloudwatch exporter.
+  # we've copied the default rules here, and adjusted the ones that didn't
+  # play well.
+  # 'deployment_scale_replica_count{deployment="transantion-api"}/ on(deployment) group_right() kube_deployment_spec_replicas{deployment="nginx"}'
+  custom:
+    - seriesQuery: 'scale_to_zero_demo_replica_count{deployment!=""}'
+      seriesFilters: []
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          deployment:
+            resource: deployment
+      metricsQuery: clamp(<<.Series>>{<<.LabelMatchers>>}/ on(deployment) group_right()   {<<.LabelMatchers>>},0,1000)
+    - seriesQuery: 'metric_name{deployment!=""}'
+      seriesFilters: []
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          deployment:
+            resource: deployment
+      metricsQuery: <<.Series>>{<<.LabelMatchers>>}
+  external:
+  - seriesQuery: 'metric_name{job="prometheus-data-generator"}'
+    metricsQuery: last_over_time(<<.Series>>{<<.LabelMatchers>>}[15m])
+    resources:
+      overrides:
+        namespace:
+          resource: "namespace"
+        deployment:
+          resource: deployment

@@ -43,10 +43,21 @@ scale_to_zero_panics
 ```
 
 ### Howto test locally
-You can install demo services from the `./demo` folder
+First you will need a testing cluster 
 ```
-kubectl apply -f app.yml -n integration-demo
-kubectl apply -f metric-generator.yml -n integration-demo
+kind create --config=./demo/kind-config.yaml
+```
+
+You have to install prometheus and prometheus-adapter
+```
+helm install prometheus prometheus-community/kube-prometheus-stack
+helm upgrade -i prom-adapter prometheus-community/prometheus-adapter -f ./demo/prom-adapter-values.yaml
+```
+
+Now install demo services from the `./demo` folder
+```
+kubectl apply -f app.yml -n default
+kubectl apply -f metric-generator.yml -n default
 ```
 to have multiple deployments with multiple random metrics bouncing between 0 and 1
 

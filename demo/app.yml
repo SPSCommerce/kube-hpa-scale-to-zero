@@ -5,7 +5,6 @@ metadata:
   labels:
     app: scale-to-zero-demo
   name: scale-to-zero-demo
-  namespace: integration-demo
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
@@ -24,7 +23,7 @@ spec:
         app: scale-to-zero-demo
     spec:
       containers:
-      - image: nginx:1.14
+      - image: nginx:1.29.1
         imagePullPolicy: Always
         name: scale-to-zero-demo
         resources:
@@ -42,8 +41,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: onovak-scale-to-zero-demo-service
-  namespace: integration-demo
+  name: scale-to-zero-demo-service
 spec:
   selector:
     app: scale-to-zero-demo
@@ -57,15 +55,14 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: scale-to-zero-demo-hpa
-  namespace: integration-demo
   labels:
     scaletozero.spscommerce.com/watch: "true"
 spec:
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 10
+      stabilizationWindowSeconds: 100
     scaleDown:
-      stabilizationWindowSeconds: 10
+      stabilizationWindowSeconds: 100
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
