@@ -329,7 +329,6 @@ func actualizeHpaState(ctx context.Context,
 			customMetricsClient:   customMetricsClient,
 			externalMetricsClient: externalMetricsClient,
 		}
-		//ctx.logger.Info(fmt.Sprintf("Processing HPA %w", hpa))
 		err := actualizeHpaTargetState(ctx)
 
 		if err != nil {
