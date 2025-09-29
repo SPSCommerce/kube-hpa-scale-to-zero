@@ -28,7 +28,7 @@ func ReportBadHpaState(namespace string, hpaName string) {
 	errorsMetric.WithLabelValues(namespace, hpaName, "hpa_state").Inc()
 }
 func ReportCustomMetricError(namespace string, volumeType string) {
-	errorsMetric.WithLabelValues(namespace, volumeType, "object_metric").Inc()
+	errorsMetric.WithLabelValues(namespace, volumeType, "custom_metric").Inc()
 }
 func ReportExternalMetricError(namespace string, volumeType string) {
 	errorsMetric.WithLabelValues(namespace, volumeType, "external_metric").Inc()

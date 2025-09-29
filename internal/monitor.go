@@ -252,6 +252,7 @@ func scaleHpaTarget(ctx hpaScopedContext, targetKind string, namespace string, t
 	}
 }
 
+// Check behaviour section of HPA(if it exist) if scaling down is allowed by StabilizationWindowSeconds
 func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
 	// If replicas >0 we should be able to identify if scaling is allowed by behaviour from status.conditions
 	if ctx.hpa.Spec.Behavior != nil &&
@@ -270,14 +271,15 @@ func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
 	return false, fmt.Errorf("Could not determine if scaling is allowed")
 }
 
+// Check behaviour section of HPA(if it exist) if scaling up is allowed by StabilizationWindowSeconds
 func allowedToScaleUp(ctx hpaScopedContext) (bool, error) {
 	if ctx.hpa.Spec.Behavior != nil &&
 		ctx.hpa.Spec.Behavior.ScaleUp != nil &&
 		ctx.hpa.Spec.Behavior.ScaleUp.StabilizationWindowSeconds != nil {
-		// If current number of replicas is zero, HPA scaling is disabled, thus we have to identify somehow if scaling up is allowed
+		// If the current number of replicas is zero, HPA scaling is disabled; therefore, we have to identify whether scaling up is allowed.
 		for _, condition := range ctx.hpa.Status.Conditions {
 			if condition.Type == "ScalingActive" && condition.Status == v1.ConditionFalse && condition.Reason == "ScalingDisabled" {
-				// That is the time when HPA's target was scaled to zero
+				// condition.LastTransitionTime is mostly for sure is the time when HPA's target was scaled to zero
 				lastTransitionTime := condition.LastTransitionTime
 				elapsedTime := time.Since(lastTransitionTime.Time)
 				stabilizationWindow := time.Duration(*ctx.hpa.Spec.Behavior.ScaleUp.StabilizationWindowSeconds) * time.Second
