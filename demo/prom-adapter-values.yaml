@@ -19,22 +19,22 @@ rules:
             resource: namespace
           deployment:
             resource: deployment
-      metricsQuery: clamp(<<.Series>>{<<.LabelMatchers>>}/ on(deployment) group_right()   {<<.LabelMatchers>>},0,1000)
-    - seriesQuery: 'metric_name{deployment!=""}'
-      seriesFilters: []
-      resources:
-        overrides:
-          namespace:
-            resource: namespace
-          deployment:
-            resource: deployment
-      metricsQuery: <<.Series>>{<<.LabelMatchers>>}
-  external:
-  - seriesQuery: 'metric_name{job="prometheus-data-generator"}'
-    metricsQuery: last_over_time(<<.Series>>{<<.LabelMatchers>>}[15m])
-    resources:
-      overrides:
-        namespace:
-          resource: "namespace"
-        deployment:
-          resource: deployment
+      metricsQuery: clamp(<<.Series>>{<<.LabelMatchers>>},0,1000)
+  #   - seriesQuery: 'metric_name{deployment!=""}'
+  #     seriesFilters: []
+  #     resources:
+  #       overrides:
+  #         namespace:
+  #           resource: namespace
+  #         deployment:
+  #           resource: deployment
+  #     metricsQuery: <<.Series>>{<<.LabelMatchers>>}
+  # external:
+  # - seriesQuery: 'metric_name{job="prometheus-data-generator"}'
+  #   metricsQuery: last_over_time(<<.Series>>{<<.LabelMatchers>>}[15m])
+  #   resources:
+  #     overrides:
+  #       namespace:
+  #         resource: "namespace"
+  #       deployment:
+  #         resource: deployment

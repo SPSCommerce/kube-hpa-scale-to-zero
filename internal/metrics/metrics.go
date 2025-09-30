@@ -13,11 +13,11 @@ var (
 	errorsMetric *prometheus.CounterVec
 )
 
-func ReportScaleIn(namespace string, hpaName string) {
-	eventsMetric.WithLabelValues(namespace, hpaName, "scale_in").Inc()
+func ReportScaleDown(namespace string, hpaName string) {
+	eventsMetric.WithLabelValues(namespace, hpaName, "scale_down").Inc()
 }
-func ReportScaleOut(namespace string, hpaName string) {
-	eventsMetric.WithLabelValues(namespace, hpaName, "scale_out").Inc()
+func ReportScaleUp(namespace string, hpaName string) {
+	eventsMetric.WithLabelValues(namespace, hpaName, "scale_up").Inc()
 }
 
 func ReportNotSupported(namespace string, hpaName string) {

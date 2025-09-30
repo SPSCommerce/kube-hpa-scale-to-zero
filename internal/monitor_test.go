@@ -19,7 +19,7 @@ import (
 	fakeexternalmetrics "k8s.io/metrics/pkg/client/external_metrics/fake"
 )
 
-func CreateTestHPA(minReplicas *int32, maxReplicas int32, quantity int64, behaviour *autoscalingv2.HorizontalPodAutoscalerBehavior, conditions []autoscalingv2.HorizontalPodAutoscalerCondition) *autoscalingv2.HorizontalPodAutoscaler {
+func createTestHPA(minReplicas *int32, maxReplicas int32, quantity int64, behaviour *autoscalingv2.HorizontalPodAutoscalerBehavior, conditions []autoscalingv2.HorizontalPodAutoscalerCondition) *autoscalingv2.HorizontalPodAutoscaler {
 	return &autoscalingv2.HorizontalPodAutoscaler{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "autoscaling/v2",
@@ -166,7 +166,7 @@ func TestNormalScalingDown(t *testing.T) {
 			Message:            "recommended size matches current size",
 		}}
 
-	hpa := CreateTestHPA(&minReplicas, maxReplicas, quantity, nil, conditions)
+	hpa := createTestHPA(&minReplicas, maxReplicas, quantity, nil, conditions)
 	hpa.Status.CurrentReplicas = 1
 
 	deploy := CreateTestDeploy(&replicas)
@@ -208,17 +208,14 @@ func TestNormalScalingDown(t *testing.T) {
 			deployment, err := fakeKubeClient.AppsV1().Deployments("default").Get(context.TODO(), "test-deployment", metav1.GetOptions{})
 			if err != nil {
 				t.Errorf("Failed to get deployment: %v", err)
-				t.Fail()
 			} else if *deployment.Spec.Replicas != 0 {
 				t.Errorf("Expected deployment to be scaled to 0, but got %d replicas", *deployment.Spec.Replicas)
-				t.Fail()
 			}
 			break
 		}
 	}
 	if !found {
 		t.Error("Expected deployment patch action to scale to 0, but none was found")
-		t.Fail()
 	}
 }
 
@@ -237,7 +234,7 @@ func TestNormalScalingUp(t *testing.T) {
 			Message:            "recommended size matches current size",
 		}}
 
-	hpa := CreateTestHPA(&minReplicas, maxReplicas, quantity, nil, conditions)
+	hpa := createTestHPA(&minReplicas, maxReplicas, quantity, nil, conditions)
 	hpa.Status.CurrentReplicas = 0
 
 	deploy := CreateTestDeploy(&replicas)
@@ -294,17 +291,14 @@ func TestNormalScalingUp(t *testing.T) {
 			deployment, err := fakeKubeClient.AppsV1().Deployments("default").Get(context.TODO(), "test-deployment", metav1.GetOptions{})
 			if err != nil {
 				t.Errorf("Failed to get deployment: %v", err)
-				t.Fail()
 			} else if *deployment.Spec.Replicas != 1 {
 				t.Errorf("Expected deployment to be scaled to 1, but got %d replicas", *deployment.Spec.Replicas)
-				t.Fail()
 			}
 			break
 		}
 	}
 	if !found {
 		t.Error("Expected deployment patch action to scale to 0, but none was found")
-		t.Fail()
 	}
 }
 
@@ -345,7 +339,7 @@ func TestScalingUpWithBehaviourNotAllowed(t *testing.T) {
 			},
 		},
 	}
-	hpa := CreateTestHPA(&minReplicas, maxReplicas, quantity, behaviour, conditions)
+	hpa := createTestHPA(&minReplicas, maxReplicas, quantity, behaviour, conditions)
 	hpa.Status.CurrentReplicas = 0
 
 	deploy := CreateTestDeploy(&replicas)
@@ -391,7 +385,6 @@ func TestScalingUpWithBehaviourNotAllowed(t *testing.T) {
 	actions := fakeKubeClient.Actions()
 	if len(actions) > 0 {
 		t.Error("Expected no actions, but some were found")
-		t.Fail()
 	}
 
 }
@@ -433,7 +426,7 @@ func TestScalingUpWithBehaviourAllowed(t *testing.T) {
 			},
 		},
 	}
-	hpa := CreateTestHPA(&minReplicas, maxReplicas, quantity, behaviour, conditions)
+	hpa := createTestHPA(&minReplicas, maxReplicas, quantity, behaviour, conditions)
 	hpa.Status.CurrentReplicas = 0
 
 	deploy := CreateTestDeploy(&replicas)
@@ -499,4 +492,199 @@ func TestScalingUpWithBehaviourAllowed(t *testing.T) {
 	if !found {
 		t.Error("Expected deployment patch action to scale to 0, but none was found")
 	}
+}
+
+func TestScalingDownWithBehaviourAllowed(t *testing.T) {
+
+	replicas := int32(1)
+	minReplicas := int32(1)
+	maxReplicas := int32(10)
+	quantity := int64(0)
+	StabilizationWindowSeconds := int32(60)
+	conditions := []autoscalingv2.HorizontalPodAutoscalerCondition{
+		{
+			Type:               autoscalingv2.AbleToScale,
+			Status:             "True",
+			LastTransitionTime: metav1.Now(),
+			Reason:             "ReadyForNewScale",
+			Message:            "recommended size matches current size",
+		}}
+	behaviour := &autoscalingv2.HorizontalPodAutoscalerBehavior{
+		ScaleDown: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: &StabilizationWindowSeconds,
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PodsScalingPolicy,
+					Value:         1,
+					PeriodSeconds: 60,
+				},
+			},
+		},
+		ScaleUp: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: &StabilizationWindowSeconds,
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PodsScalingPolicy,
+					Value:         1,
+					PeriodSeconds: 60,
+				},
+			},
+		},
+	}
+	hpa := createTestHPA(&minReplicas, maxReplicas, quantity, behaviour, conditions)
+	hpa.Status.CurrentReplicas = 1
+
+	deploy := CreateTestDeploy(&replicas)
+
+	fakeKubeClient := fake.NewClientset(deploy)
+	fakeExternalMetrics := &fakeexternalmetrics.FakeExternalMetricsClient{}
+	fakeCustomMetrics := &fakecustommetrics.FakeCustomMetricsClient{}
+
+	// Add external metric using AddReactor - this mocks the external metrics API
+	fakeExternalMetrics.Fake.AddReactor("list", "*", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+		// Return a metric list with the desired metric value
+		return true, &v1beta1.ExternalMetricValueList{
+			Items: []v1beta1.ExternalMetricValue{
+				{
+					MetricName: "scale_to_zero_demo_replica_count",
+					Value:      *resource.NewQuantity(0, resource.DecimalSI), // This is the metric value that will be returned
+					Timestamp:  metav1.Now(),
+				},
+			},
+		}, nil
+	})
+
+	logger := logr.Discard()
+
+	ctx := hpaScopedContext{
+		Context:               context.TODO(),
+		hpa:                   hpa,
+		logger:                &logger,
+		kubeClient:            fakeKubeClient,
+		customMetricsClient:   fakeCustomMetrics,
+		externalMetricsClient: fakeExternalMetrics,
+	}
+
+	// Execute the function
+	err := actualizeHpaTargetState(ctx)
+
+	// Verify results
+	if err != nil {
+		t.Errorf("Expected no error, but got: %v", err)
+	}
+
+	// Check that a patch action was called to scale to 0
+	actions := fakeKubeClient.Actions()
+	found := false
+	for _, action := range actions {
+		if action.GetVerb() == "patch" && action.GetResource().Resource == "deployments" {
+			// Cast the action to PatchAction to get patch details
+			if patchAction, ok := action.(k8stesting.PatchAction); ok {
+				t.Logf("Patch action found with data: %s", string(patchAction.GetPatch()))
+			}
+
+			found = true
+
+			// Get the deployment to verify it was scaled to 1
+			deployment, err := fakeKubeClient.AppsV1().Deployments("default").Get(context.TODO(), "test-deployment", metav1.GetOptions{})
+			if err != nil {
+				t.Errorf("Failed to get deployment: %v", err)
+			} else if *deployment.Spec.Replicas != 0 {
+				t.Errorf("Expected deployment to be scaled to 0, but got %d replicas", *deployment.Spec.Replicas)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected deployment patch action to scale to 0, but none was found")
+	}
+
+}
+
+func TestScalingDownWithBehaviourNotAllowed(t *testing.T) {
+
+	replicas := int32(1)
+	minReplicas := int32(1)
+	maxReplicas := int32(10)
+	quantity := int64(0)
+	StabilizationWindowSeconds := int32(60)
+	conditions := []autoscalingv2.HorizontalPodAutoscalerCondition{
+		{
+			Type:               autoscalingv2.AbleToScale,
+			Status:             "True",
+			LastTransitionTime: metav1.Now(),
+			Reason:             "ScaleUpStabilized",
+			Message:            "recommended size matches current size",
+		}}
+	behaviour := &autoscalingv2.HorizontalPodAutoscalerBehavior{
+		ScaleDown: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: &StabilizationWindowSeconds,
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PodsScalingPolicy,
+					Value:         1,
+					PeriodSeconds: 60,
+				},
+			},
+		},
+		ScaleUp: &autoscalingv2.HPAScalingRules{
+			StabilizationWindowSeconds: &StabilizationWindowSeconds,
+			Policies: []autoscalingv2.HPAScalingPolicy{
+				{
+					Type:          autoscalingv2.PodsScalingPolicy,
+					Value:         1,
+					PeriodSeconds: 60,
+				},
+			},
+		},
+	}
+	hpa := createTestHPA(&minReplicas, maxReplicas, quantity, behaviour, conditions)
+	hpa.Status.CurrentReplicas = 1
+
+	deploy := CreateTestDeploy(&replicas)
+
+	fakeKubeClient := fake.NewClientset(deploy)
+	fakeExternalMetrics := &fakeexternalmetrics.FakeExternalMetricsClient{}
+	fakeCustomMetrics := &fakecustommetrics.FakeCustomMetricsClient{}
+
+	// Add external metric using AddReactor - this mocks the external metrics API
+	fakeExternalMetrics.Fake.AddReactor("list", "*", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+		// Return a metric list with the desired metric value
+		return true, &v1beta1.ExternalMetricValueList{
+			Items: []v1beta1.ExternalMetricValue{
+				{
+					MetricName: "scale_to_zero_demo_replica_count",
+					Value:      *resource.NewQuantity(0, resource.DecimalSI), // This is the metric value that will be returned
+					Timestamp:  metav1.Now(),
+				},
+			},
+		}, nil
+	})
+
+	logger := logr.Discard()
+
+	ctx := hpaScopedContext{
+		Context:               context.TODO(),
+		hpa:                   hpa,
+		logger:                &logger,
+		kubeClient:            fakeKubeClient,
+		customMetricsClient:   fakeCustomMetrics,
+		externalMetricsClient: fakeExternalMetrics,
+	}
+
+	// Execute the function
+	err := actualizeHpaTargetState(ctx)
+
+	// Verify results
+	if err != nil {
+		t.Errorf("Expected no error, but got: %v", err)
+	}
+
+	// Check that a patch action was called to scale to 0
+	actions := fakeKubeClient.Actions()
+
+	if len(actions) > 0 {
+		t.Error("Expected no actions, but some were found")
+	}
+
 }
