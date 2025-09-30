@@ -768,7 +768,7 @@
       "targets": [
         {
           "editorMode": "builder",
-          "expr": "delta(scale_to_zero_events{service=\"kube-hpa-scale-to-zero\", type=\"scale_dowm\"}[$__rate_interval])",
+          "expr": "delta(scale_to_zero_events{service=\"kube-hpa-scale-to-zero\", type=\"scale_down\"}[$__rate_interval])",
           "legendFormat": "{{target_namespace}}.{{target_hpa}}",
           "range": true,
           "refId": "A"
