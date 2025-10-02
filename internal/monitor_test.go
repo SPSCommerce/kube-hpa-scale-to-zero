@@ -276,7 +276,7 @@ func TestNormalScalingUp(t *testing.T) {
 		t.Errorf("Expected no error, but got: %v", err)
 	}
 
-	// Check that a patch action was called to scale to 0
+	// Check that a patch action was called to scale to 1
 	actions := fakeKubeClient.Actions()
 	found := false
 	for _, action := range actions {
@@ -298,7 +298,7 @@ func TestNormalScalingUp(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("Expected deployment patch action to scale to 0, but none was found")
+		t.Error("Expected deployment patch action to scale to 1, but none was found")
 	}
 }
 
@@ -468,7 +468,7 @@ func TestScalingUpWithBehaviourAllowed(t *testing.T) {
 		t.Errorf("Expected no error, but got: %v", err)
 	}
 
-	// Check that a patch action was called to scale to 0
+	// Check that a patch action was called to scale to 1
 	actions := fakeKubeClient.Actions()
 	found := false
 	for _, action := range actions {
@@ -490,7 +490,7 @@ func TestScalingUpWithBehaviourAllowed(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("Expected deployment patch action to scale to 0, but none was found")
+		t.Error("Expected deployment patch action to scale to 1, but none was found")
 	}
 }
 

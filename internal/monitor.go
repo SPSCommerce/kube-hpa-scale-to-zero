@@ -254,20 +254,20 @@ func scaleHpaTarget(ctx hpaScopedContext, targetKind string, namespace string, t
 
 // Check behaviour section of HPA(if it exist) if scaling down is allowed by StabilizationWindowSeconds
 func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
-	// If replicas >0 we should be able to identify if scaling is allowed by behaviour from status.conditions
-	if ctx.hpa.Spec.Behavior != nil &&
-		ctx.hpa.Spec.Behavior.ScaleDown != nil &&
-		ctx.hpa.Spec.Behavior.ScaleDown.StabilizationWindowSeconds != nil {
-		for _, condition := range ctx.hpa.Status.Conditions {
-			if condition.Type == "AbleToScale" && condition.Status == v1.ConditionTrue && condition.Reason == "ReadyForNewScale" {
-				return true, nil
-			} else if (condition.Type == "AbleToScale" && condition.Status == v1.ConditionFalse) || (condition.Type == "AbleToScale" && condition.Reason == "ScaleUpStabilized") {
-				return false, nil
-			}
-		}
-	} else {
+	// Identify if ScaleDown.StabilizationWindowSeconds is set in HPA spec
+	if ctx.hpa.Spec.Behavior == nil || ctx.hpa.Spec.Behavior.ScaleDown == nil || ctx.hpa.Spec.Behavior.ScaleDown.StabilizationWindowSeconds == nil {
 		return true, nil
 	}
+	for _, condition := range ctx.hpa.Status.Conditions {
+		// in here we are relying no HPAs condition for defining if scaling down is allowed
+		if condition.Type == "AbleToScale" && condition.Status == v1.ConditionTrue && condition.Reason == "ReadyForNewScale" {
+			return true, nil
+			// if behaviour does not allow scaling now AbleToScale condition will have  ScaleDownStabilized reason
+		} else if (condition.Type == "AbleToScale" && condition.Status == v1.ConditionFalse) || (condition.Type == "AbleToScale" && condition.Reason == "ScaleDownStabilized" && condition.Status == v1.ConditionTrue) {
+			return false, nil
+		}
+	}
+
 	return false, fmt.Errorf("could not determine if scaling is allowed")
 }
 
@@ -321,7 +321,7 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 		allowed, err := allowedToScaleDown(ctx)
 		if err != nil {
 			metrics.ReportScalingError(ctx.hpa.Namespace, ctx.hpa.Name)
-			return fmt.Errorf("Couldn't identify if scaling is allowed: %s", err)
+			return fmt.Errorf("couldn't identify if scaling is allowed: %s", err)
 		}
 		if allowed {
 			ctx.logger.Info("Should be scaled down to 0")
@@ -339,7 +339,7 @@ func actualizeHpaTargetState(ctx hpaScopedContext) error {
 		allowed, err := allowedToScaleUp(ctx)
 		if err != nil {
 			metrics.ReportScalingError(ctx.hpa.Namespace, ctx.hpa.Name)
-			return fmt.Errorf("Couldn't identify if scaling is allowed: %s", err)
+			return fmt.Errorf("couldn't identify if scaling is allowed: %s", err)
 		}
 		if allowed {
 			ctx.logger.Info("Should be scaled up to 1")
