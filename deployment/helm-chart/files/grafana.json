@@ -600,7 +600,7 @@
       "type": "row"
     },
     {
-      "description": "amount of scale outs",
+      "description": "amount of scale ups",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -681,17 +681,17 @@
       "targets": [
         {
           "editorMode": "builder",
-          "expr": "delta(scale_to_zero_events{service=\"kube-hpa-scale-to-zero\", type=\"scale_out\"}[$__rate_interval])",
+          "expr": "delta(scale_to_zero_events{service=\"kube-hpa-scale-to-zero\", type=\"scale_up\"}[$__rate_interval])",
           "legendFormat": "{{target_namespace}}.{{target_hpa}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Scale outs",
+      "title": "Scale ups",
       "type": "timeseries"
     },
     {
-      "description": "amount of scale ins",
+      "description": "amount of scale downs",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -768,13 +768,13 @@
       "targets": [
         {
           "editorMode": "builder",
-          "expr": "delta(scale_to_zero_events{service=\"kube-hpa-scale-to-zero\", type=\"scale_in\"}[$__rate_interval])",
+          "expr": "delta(scale_to_zero_events{service=\"kube-hpa-scale-to-zero\", type=\"scale_down\"}[$__rate_interval])",
           "legendFormat": "{{target_namespace}}.{{target_hpa}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Scale In",
+      "title": "Scale Down",
       "type": "timeseries"
     }
   ],

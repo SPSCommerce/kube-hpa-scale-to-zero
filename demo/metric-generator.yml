@@ -14,14 +14,14 @@ data:
         sequence:
           - time: 5
             eval_time: 60
-            values: 2-3
+            values: 0-3
             operation: set
             labels:
               deployment: scale-to-zero-demo-prometheus-data-generator
               facet: 1
           - time: 5
             eval_time: 60
-            values: 2-3
+            values: 0-3
             operation: set
             labels:
               deployment: scale-to-zero-demo-prometheus-data-generator
@@ -33,7 +33,7 @@ data:
         sequence:
           - time: 5
             eval_time: 60 
-            values: 2-3
+            values: 0-3
             operation: set
             labels:
               namespace: default

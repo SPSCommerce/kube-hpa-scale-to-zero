@@ -45,21 +45,21 @@ scale_to_zero_panics
 ### Howto test locally
 First you will need a testing cluster 
 ```
-kind create --config=./demo/kind-config.yaml
+kind create cluster --config=./demo/kind-config.yaml
 ```
 
 You have to install prometheus and prometheus-adapter
 ```
-helm install prometheus prometheus-community/kube-prometheus-stack
+helm upgrade -i prometheus prometheus-community/kube-prometheus-stack
 helm upgrade -i prom-adapter prometheus-community/prometheus-adapter -f ./demo/prom-adapter-values.yaml
 ```
 
 Now install demo services from the `./demo` folder
 ```
-kubectl apply -f app.yml -n default
-kubectl apply -f metric-generator.yml -n default
+kubectl apply -f ./demo/app.yml -n default
+kubectl apply -f ./demo/metric-generator.yml -n default
 ```
 to have multiple deployments with multiple random metrics bouncing between 0 and 1
 
 Now you can run service locally to scale services in a real kube cluster:
-`go run ./cmd --kube-config "<path to your kube config>" --write-plain-logs --hpa-selector "scaleToZero.spscommerce.com/watch=true"`
+`go run ./cmd --kube-config "<path to your kube config>" --hpa-selector "scaleToZero.spscommerce.com/watch=true"`
