@@ -267,8 +267,8 @@ func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
 			return false, nil
 		}
 	}
-
-	return false, fmt.Errorf("could not determine if scaling is allowed")
+	// Returning the whole HPA object for debug purposes
+	return false, fmt.Errorf("could not determine if scaling down is allowed for HPA: %s", ctx.hpa)
 }
 
 // Check behaviour section of HPA(if it exist) if scaling up is allowed by StabilizationWindowSeconds
@@ -292,7 +292,8 @@ func allowedToScaleUp(ctx hpaScopedContext) (bool, error) {
 	} else {
 		return true, nil
 	}
-	return false, fmt.Errorf("could not determine if scaling is allowed")
+	// Returning the whole HPA object for debug purposes
+	return false, fmt.Errorf("could not determine if scaling up is allowed for HPA: %s", ctx.hpa)
 }
 
 func actualizeHpaTargetState(ctx hpaScopedContext) error {
