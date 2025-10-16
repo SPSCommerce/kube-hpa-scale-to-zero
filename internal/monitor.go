@@ -265,6 +265,9 @@ func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
 			// if behaviour does not allow scaling now AbleToScale condition will have  ScaleDownStabilized reason
 		} else if (condition.Type == "AbleToScale" && condition.Status == v1.ConditionFalse) || (condition.Type == "AbleToScale" && condition.Reason == "ScaleDownStabilized" && condition.Status == v1.ConditionTrue) {
 			return false, nil
+			// This happens when all metrics are 0 and Deployment should have scaled to 0, but HPA scaled deployment to 1, because it cannot go lower than 1. In this case we allowing scaling down to 0.
+		} else if condition.Type == "AbleToScale" && condition.Status == v1.ConditionTrue && condition.Reason == "SucceededRescale" && ctx.hpa.Status.DesiredReplicas == 1 {
+			return true, nil
 		}
 	}
 	// Returning the whole HPA object for debug purposes
