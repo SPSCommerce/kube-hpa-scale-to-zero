@@ -260,7 +260,7 @@ func allowedToScaleDown(ctx hpaScopedContext) (bool, error) {
 	}
 	for _, condition := range ctx.hpa.Status.Conditions {
 		// in here we are relying no HPAs condition for defining if scaling down is allowed
-		if condition.Type == "AbleToScale" && condition.Status == v1.ConditionTrue && condition.Reason == "ReadyForNewScale" { //         Reason: SucceededRescale
+		if condition.Type == "AbleToScale" && condition.Status == v1.ConditionTrue && condition.Reason == "ReadyForNewScale" {
 			return true, nil
 			// if behaviour does not allow scaling now AbleToScale condition will have  ScaleDownStabilized reason
 		} else if (condition.Type == "AbleToScale" && condition.Status == v1.ConditionFalse) ||
