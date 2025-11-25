@@ -7,7 +7,7 @@ metadata:
   name: scale-to-zero-demo
 spec:
   progressDeadlineSeconds: 600
-  replicas: 0
+  replicas: 5
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -60,9 +60,9 @@ metadata:
 spec:
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 300
+      stabilizationWindowSeconds: 60
     scaleDown:
-      stabilizationWindowSeconds: 300
+      stabilizationWindowSeconds: 60
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
