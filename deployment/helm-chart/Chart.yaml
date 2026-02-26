@@ -2,5 +2,5 @@ apiVersion: v2
 name: kube-hpa-scale-to-zero
 description: https://github.com/SPSCommerce/kube-hpa-scale-to-zero
 type: application
-version: 0.12.8
-appVersion: 0.12.8
+version: 0.12.9
+appVersion: 0.12.9
