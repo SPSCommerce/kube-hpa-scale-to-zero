@@ -6,7 +6,7 @@ ARG TARGETARCH
 
 RUN GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-s" -o run ./cmd
 
-FROM --platform=$TARGETPLATFORM golang:1.25
+FROM golang:1.25
 COPY --from=builder /sources/run /app/run
 WORKDIR /app
 ENTRYPOINT ["/app/run"]
