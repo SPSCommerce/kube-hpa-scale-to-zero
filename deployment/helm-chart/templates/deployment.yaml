@@ -18,6 +18,9 @@ spec:
         {{- include "kube-hpa-scale-to-zero.labels" . | nindent 8 }}
         app: {{ include "kube-hpa-scale-to-zero.fullname" . }}
     spec:
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
       serviceAccountName: {{ .Values.rbac.serviceAccountName }}
       {{- with .Values.pod.affinity }}
       affinity:

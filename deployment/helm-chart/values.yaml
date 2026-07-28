@@ -23,6 +23,8 @@ grafana:
   useDefault: true
   dashboard: "files/grafana.json"
 
+priorityClassName: ""
+
 prometheus:
   useDefault: true
   selector: cluster-prometheus
