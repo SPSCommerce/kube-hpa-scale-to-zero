@@ -12,6 +12,8 @@ updates:
       include: scope
     schedule:
       interval: "quarterly"
+    cooldown:
+      default-days: 30      
     groups:
       dependencies:
         applies-to: version-updates
