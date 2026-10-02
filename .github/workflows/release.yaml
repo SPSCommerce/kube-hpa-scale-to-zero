@@ -1,6 +1,7 @@
 name: UpdateChart
 run-name: update chart
 on:
+  workflow_dispatch:
   push:
     branches:
       - 'main'
