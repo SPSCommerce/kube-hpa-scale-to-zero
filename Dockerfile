@@ -4,9 +4,9 @@ WORKDIR /sources
 
 ARG TARGETARCH
 
-RUN GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-s" -o run ./cmd
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags "-s" -o run ./cmd
 
-FROM golang:1.26
+FROM gcr.io/distroless/static:nonroot
 COPY --from=builder /sources/run /app/run
 WORKDIR /app
 ENTRYPOINT ["/app/run"]
